@@ -1,3 +1,7 @@
+# ----usefuul for me ----
+# in Terminal (Tools --> Terminal)
+# git grep -n TODO
+
 # Packages
 library(sf)
 library(terra)
@@ -5,12 +9,16 @@ library(landscapemetrics)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(patchwork)
 
+library(sysfonts)
+library(showtextdb)
 library(showtext)
 font_add_google("Source Sans 3", "Source Sans 3")
 showtext_auto()
 
-# Load Data (Old Path)
+# ---- Load Data (Old Path) ----
+# TODO: New path
 
 setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
 
@@ -30,6 +38,8 @@ merged_data$poly_id <- seq_len(nrow(merged_data))
 # merged_data_long <- merged_data %>% st_drop_geometry() %>%
 #pivot_longer(cols = -c(type, poly_id), names_to="metric", values_to = "value")
 
+################################################################################
+
 # rasterisation with cell size of 5m
 raster <- rast(ext(merged_data), resolution = 5)
 
@@ -44,7 +54,7 @@ plot(r_type)
 
 
 ################################################################################
-### How many Buildings touch a building? ###
+#---- How many Buildings touch a building? ----
 ################################################################################
 
 ## Count touches for each polygon in unstructured
@@ -175,7 +185,6 @@ map_counts_buildings <- ggplot() +
     title = "Urban Contrasts in Cairo’s Building Structure",
     subtitle = "Number of neighbouring buildings in contact"
   )+
-  theme_fancy_map()+
   theme(
     text = element_text(family = "Source Sans 3"),
     plot.title = element_text(color="#F2F2DE", size = 25),
@@ -186,6 +195,50 @@ map_counts_buildings <- ggplot() +
 map_counts_buildings
 
 #Combine Barplot and Map
+
 combined_map_bar <- map_counts_buildings +
   inset_element(bar, left = 0.01, right= 0.30, bottom = 0.05, top = 0.35)
+
+# horrible map
 combined_map_bar
+
+################################################################################
+#---- Next Stuff ----
+
+# Calculating the centroid for every building
+centroid <- st_centroid(merged_data)
+plot(centroid[4], pch=20)
+
+# 50m buffer
+buffer_50m <- st_buffer(centroid, dist = 50)
+buffer_100m <- st_buffer(centroid, dist = 100)
+
+# Calculating the number of centroids within the buffer for each point
+count_neighbour_50 <- st_intersects(buffer_50m, centroid)
+count_neighbour_100 <- st_intersects(buffer_100m, centroid)
+
+# Adding new column ("-1" to not include the respective point itself)
+centroid$neighbour_50m <- lengths(count_neighbour_50) - 1
+centroid$neighbour_100m <- lengths(count_neighbour_100) - 1
+
+
+# Map 
+plot_50m <- ggplot(centroid)+ 
+  geom_sf(aes(color=neighbour_50m), size = 1)+
+  scale_color_viridis_c(option = "plasma", name = "Neighbours within 50 m distance") +
+  labs(
+    title = "Neighbours 50 m",
+  )
+
+plot_100m <- ggplot(centroid)+ 
+  geom_sf(aes(color=neighbour_100m), size = 1)+
+  scale_color_viridis_c(option = "plasma", name = "Neighbours within 100 m distance") +
+  labs(
+    title = "Neighbours 100 m",
+  )
+plot_50m + plot_100m
+
+# TODO: calculating Area for Polygons
+# TODO: Transfer buffer of points to polygon level
+# TODO: Only Polygons with Area => 50% within buffer counts as neighbour
+
