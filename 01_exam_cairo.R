@@ -205,6 +205,16 @@ combined_map_bar
 ################################################################################
 #---- Next Stuff ----
 
+# Calculating area
+merged_data$area_m2 <-st_area(merged_data)
+# Saving as numeric, cause its sometimes easier to use
+merged_data$area_m2_num <- as.numeric(st_area(merged_data))
+
+#ggplot(merged_data)+ 
+#  geom_sf(aes(fill=area_m2_num), color=NA)+
+#  scale_fill_viridis_c(option = "plasma") 
+
+
 # Calculating the centroid for every building
 centroid <- st_centroid(merged_data)
 plot(centroid[4], pch=20)
@@ -213,8 +223,13 @@ plot(centroid[4], pch=20)
 buffer_50m <- st_buffer(centroid, dist = 50)
 buffer_100m <- st_buffer(centroid, dist = 100)
 
-# Calculating the number of centroids within the buffer for each point
+# Counting the number of centroids within the buffer for each point
 count_neighbour_50 <- st_intersects(buffer_50m, centroid)
+
+# Checking that buildings are not mixed up
+count_neighbour_50[[5]]
+merged_data$poly_id[count_neighbour_50[[5]]]
+
 count_neighbour_100 <- st_intersects(buffer_100m, centroid)
 
 # Adding new column ("-1" to not include the respective point itself)
@@ -238,7 +253,43 @@ plot_100m <- ggplot(centroid)+
   )
 plot_50m + plot_100m
 
-# TODO: calculating Area for Polygons
-# TODO: Transfer buffer of points to polygon level
-# TODO: Only Polygons with Area => 50% within buffer counts as neighbour
+# ---- Filtering buffers ----
+# Using only buildings with at least 50% of their area within buffers 
 
+# Empty vector to enter the counted neighbours in the for loop below
+count_neighbour_50m_filtered <- integer(nrow(centroid))
+
+for (i in seq_len(nrow(buffer_50m))) {
+  # BBuffer current centroid 
+  buffer_i <- buffer_50m[i, ]
+  
+  # All centroids within the buffer (including current one)
+  neighbour <- count_neighbour_50[[i]]
+  all_polygone <- merged_data[neighbour, ]
+  
+  # Calculating intersection
+  intersect <- st_intersection(all_polygone, buffer_i)
+  
+  # Calculate total area and potential intersection area
+  area <- st_area(all_polygone)
+  area_intersect <- st_area(intersect)
+  
+  # Calculating percentage share
+  area_precentage <- as.numeric((area_intersect / area)*100)
+  
+  # Only keeping Buildings with more at least 50% of the area within the buffer
+  neighbours_filtered <- neighbour[area_precentage >= 50]
+  
+  #  excluding centroid[i] from counting
+  neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
+  
+  # Counting
+  count_neighbour_50m_filtered[i] <- length(neighbours_filtered)
+}
+
+centroid$neighbour_50m_filtered <- neighbour_count_50m_filtered
+
+# TODO: Habe jetzt zwei mal Fläche berechnet, muss eines noch raus schmeißen
+# TODO: Map graph
+# TODO: BAreplot counting Graph
+# TODO: Combine bareplot and Map
