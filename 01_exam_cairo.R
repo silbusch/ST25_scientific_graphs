@@ -257,7 +257,7 @@ plot_50m + plot_100m
 # Using only buildings with at least 50% of their area within buffers 
 
 # Empty vector to enter the counted neighbours in the for loop below
-count_neighbour_50m_filtered <- integer(nrow(centroid))
+neighbour_count_50m_filtered <- integer(nrow(centroid))
 
 for (i in seq_len(nrow(buffer_50m))) {
   # BBuffer current centroid 
@@ -284,12 +284,75 @@ for (i in seq_len(nrow(buffer_50m))) {
   neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
   
   # Counting
-  count_neighbour_50m_filtered[i] <- length(neighbours_filtered)
+  neighbour_count_50m_filtered[i] <- length(neighbours_filtered)
 }
 
 centroid$neighbour_50m_filtered <- neighbour_count_50m_filtered
+
+# Join Counts to merged_data without geometry
+merged_data <- merged_data %>%
+  left_join(centroid %>% st_drop_geometry() %>% select(poly_id, neighbour_50m_filtered),
+    by = "poly_id"
+  )
 
 # TODO: Habe jetzt zwei mal Fläche berechnet, muss eines noch raus schmeißen
 # TODO: Map graph
 # TODO: BAreplot counting Graph
 # TODO: Combine bareplot and Map
+
+#---- Creating Map ----
+
+map_neighbour_50 <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_filtered)), color = NA) +
+  scale_fill_viridis_d(option = "plasma") +
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Number of neighbouring buildings within a radius of 50 metres"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 25),
+    plot.subtitle = element_text(color="#F2F2DE", size = 18),
+    plot.background = element_rect(fill = "grey30", color = NA),
+    plot.margin = margin(t = 5, l = 1, unit = "mm"),)
+
+map_neighbour_50
+
+bar_50 <- ggplot(merged_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "plasma") +
+  labs(
+    x = "Neighbouring Buildings within a radius of 50 m",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured", "2" = "Structured"))) +
+  scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  scale_y_continuous(breaks = seq(0, 500, 100))+
+  geom_hline(
+    yintercept = seq(0, 500, 100),
+    color = "white",
+    linetype = "dotted",
+    linewidth = 0.3 
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 10,
+                               colour = "#F2F2DE",
+                               family = "Source Sans 3"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", face = "bold"),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", face = "bold"),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+#---- Combine BArplots and map ----
+combined_map_bar <- map_neighbour_50 +
+  inset_element(bar_50, left = 0.01, right= 0.30, bottom = 0.05, top = 0.35)
+combined_map_bar
+  
