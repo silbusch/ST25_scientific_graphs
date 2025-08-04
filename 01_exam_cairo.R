@@ -299,6 +299,7 @@ merged_data <- merged_data %>%
 # TODO: Map graph
 # TODO: BAreplot counting Graph
 # TODO: Combine bareplot and Map
+# TODO: Thinking about art der darstellung barplot.....smooth?
 
 #---- Creating Map ----
 
