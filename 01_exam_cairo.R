@@ -10,6 +10,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
+library(concaveman)
 
 library(sysfonts)
 library(showtextdb)
@@ -40,180 +41,25 @@ merged_data$poly_id <- seq_len(nrow(merged_data))
 
 ################################################################################
 
-# rasterisation with cell size of 5m
-raster <- rast(ext(merged_data), resolution = 5)
-
-# raster with type-values
-r_type <- rasterize(merged_data, raster, field = "type")
-
-# raster with ID-values
-r_polyid <- rasterize(merged_data, raster, field = "poly_id")
-
-plot(r_polyid)
-plot(r_type)
-
-
-################################################################################
-#---- How many Buildings touch a building? ----
-################################################################################
-
-## Count touches for each polygon in unstructured
-touch_matrix <- st_touches(unstructured)
-
-unstructured$touch_count <- factor(lengths(st_touches(unstructured)))
-
-head(unstructured$touch_count)
-
-## Count touches for each polygon in structured
-touch_matrix <- st_touches(structured)
-
-structured$touch_count <- factor(lengths(st_touches(structured)))
-
-head(structured$touch_count)
-
-# Histogramm for unstruc and struc
-#adding column with information unstruc or struc, so I know which row correspond to which class
-structured$typ <- "struc"
-unstructured$typ <- "unstruc"
-
-combined <- rbind(structured[, c("touch_count", "typ")],
-                  unstructured[, c("touch_count", "typ")])
-
-# histogram
-ggplot(combined, aes(x = touch_count, fill = typ)) +
-  geom_bar(position = "dodge") +
-  geom_text(
-    stat = "count",
-    aes(label = after_stat(count)),
-    position = position_dodge(width = 0.9),
-    vjust = -0.2,
-    size = 3,
-    color = "black"
-  )+
-  labs(title = "Number of neighbouring buildings", 
-       x = "Count Neighbours", 
-       y = "Count Buildings",
-       fill = "...")
-
-# barplot (legend)
-bar_data <- combined %>%
-  count(touch_count, typ) %>%
-  arrange(touch_count, typ) %>%
-  group_by(touch_count) %>%
-  mutate(
-    ymin = cumsum(n) - n,
-    ymax = cumsum(n)
-  )
-
-# no separation
-bar_data <- bar_data %>%
-  mutate(typ = factor(typ, levels = c("unstruc", "struc")))
-
-# filtering all zero neighbors for struc
-highlight_struc <- bar_data %>%
-  filter(touch_count == 0, typ == "struc")
-
-# Adding a color to YlGnBu-Palette (cause n=10)
-palette <- c(
-  "#FFFFD9","#EDF8B1","#C7E9B4","#7FCDBB","#41B6C4","#1D91C0","#225EA8",
-  "#253494","#081D58", "black"
-)
-
-bar <- ggplot(bar_data, aes(x = factor(touch_count), y = n, fill = factor(touch_count))) +
-  geom_col(position = "stack", color = NA) +
-  geom_rect(
-    data = highlight_struc,
-    aes(
-      xmin = as.numeric(factor(touch_count)) - 0.4,
-      xmax = as.numeric(factor(touch_count)) + 0.4,
-      ymin = ymin,
-      ymax = ymax
-    ),
-    inherit.aes = FALSE,
-    color = "darkred",
-    fill = NA,
-    linewidth = 1.3
-  ) +
-  scale_fill_manual(values = palette, guide="none") +
-  labs(
-    x = "Neighbouring Buildings in Contact",
-    y = "Count",
-    fill = "Type"
-  ) +
-  scale_y_continuous(breaks = seq(0, 2500, 500))+
-  geom_hline(
-    yintercept = seq(0, 2500, 500),
-    color = "white",
-    linetype = "dotted",
-    linewidth = 0.3 )+
-  theme(
-    text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 10, 
-                               colour = "#F2F2DE",
-                               family = "Source Sans 3"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", face = "bold"),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", face = "bold"),
-    panel.background = element_rect(fill = NA, color = NA),
-    plot.background = element_rect(fill = NA, color = NA),
-    panel.grid.major = element_blank(),                       
-    panel.grid.minor = element_blank()
-  )+
-  annotate(
-    x=1,
-    y=450,
-    geom="text",
-    label="East side",
-    color="darkred",
-    angle=90,
-    size = 4,
-    fontface = "bold"
-  )+
-  coord_cartesian(clip = "off")
-
-bar
-
-#Creating the Map of Buildings
-map_counts_buildings <- ggplot() +
-  geom_sf(data = combined, aes(fill = factor(touch_count)), color = NA) +
-  scale_fill_manual(
-    values = palette,
-    guide = "none",
-    breaks = 0:9
-  ) +
-  labs(
-    title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Number of neighbouring buildings in contact"
-  )+
-  theme(
-    text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color="#F2F2DE", size = 25),
-    plot.subtitle = element_text(color="#F2F2DE", size = 18),
-    plot.background = element_rect(fill = "grey30", color = NA),
-    plot.margin = margin(t = 5, l = 1, unit = "mm"),)
-
-map_counts_buildings
-
-#Combine Barplot and Map
-
-combined_map_bar <- map_counts_buildings +
-  inset_element(bar, left = 0.01, right= 0.30, bottom = 0.05, top = 0.35)
-
-# horrible map
-combined_map_bar
+# ggplot()+
+#   geom_sf(data=merged_data)
+# 
+# 
+# ######################
+# # rasterisation with cell size of 5m
+# raster <- rast(ext(merged_data), resolution = 5)
+# 
+# # raster with type-values
+# r_type <- rasterize(merged_data, raster, field = "type")
+# 
+# # raster with ID-values
+# r_polyid <- rasterize(merged_data, raster, field = "poly_id")
+# 
+# plot(r_polyid)
+# plot(r_type)
 
 ################################################################################
-#---- Next Stuff ----
-
-# Calculating area
-merged_data$area_m2 <-st_area(merged_data)
-# Saving as numeric, cause its sometimes easier to use
-merged_data$area_m2_num <- as.numeric(st_area(merged_data))
-
-#ggplot(merged_data)+ 
-#  geom_sf(aes(fill=area_m2_num), color=NA)+
-#  scale_fill_viridis_c(option = "plasma") 
-
+#---- Number of buildings in the buffer zone of each building ------------------
 
 # Calculating the centroid for every building
 centroid <- st_centroid(merged_data)
@@ -221,7 +67,8 @@ plot(centroid[4], pch=20)
 
 # 50m buffer
 buffer_50m <- st_buffer(centroid, dist = 50)
-buffer_100m <- st_buffer(centroid, dist = 100)
+
+buffer_area_50m <- pi * 50^2
 
 # Counting the number of centroids within the buffer for each point
 count_neighbour_50 <- st_intersects(buffer_50m, centroid)
@@ -230,82 +77,152 @@ count_neighbour_50 <- st_intersects(buffer_50m, centroid)
 count_neighbour_50[[5]]
 merged_data$poly_id[count_neighbour_50[[5]]]
 
-count_neighbour_100 <- st_intersects(buffer_100m, centroid)
-
 # Adding new column ("-1" to not include the respective point itself)
 centroid$neighbour_50m <- lengths(count_neighbour_50) - 1
-centroid$neighbour_100m <- lengths(count_neighbour_100) - 1
 
 
-# Map 
-plot_50m <- ggplot(centroid)+ 
-  geom_sf(aes(color=neighbour_50m), size = 1)+
-  scale_color_viridis_c(option = "plasma", name = "Neighbours within 50 m distance") +
-  labs(
-    title = "Neighbours 50 m",
-  )
 
-plot_100m <- ggplot(centroid)+ 
-  geom_sf(aes(color=neighbour_100m), size = 1)+
-  scale_color_viridis_c(option = "plasma", name = "Neighbours within 100 m distance") +
-  labs(
-    title = "Neighbours 100 m",
-  )
-plot_50m + plot_100m
+# # Map 
+# plot_50m <- ggplot(centroid)+ 
+#   geom_sf(aes(color=neighbour_50m), size = 1)+
+#   scale_color_viridis_c(option = "plasma", name = "Neighbours within 50 m distance") +
+#   labs(
+#     title = "Neighbours 50 m",
+#   )
+# 
+# plot_100m <- ggplot(centroid)+ 
+#   geom_sf(aes(color=neighbour_100m), size = 1)+
+#   scale_color_viridis_c(option = "plasma", name = "Neighbours within 100 m distance") +
+#   labs(
+#     title = "Neighbours 100 m",
+#   )
+# plot_50m + plot_100m
 
-# ---- Filtering buffers ----
-# Using only buildings with at least 50% of their area within buffers 
+#---- Delimiting the study area ------------------------------------------------
+# Roads should not be considered "outside the study area"
 
-# Empty vector to enter the counted neighbours in the for loop below
-neighbour_count_50m_filtered <- integer(nrow(centroid))
+# getting EVERY corner coordinate of the buildings
+corner <- st_coordinates(merged_data) %>%
+  as.data.frame() %>%
+  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
 
+# concave area around the building cluster....so I don´t have the huge area around
+border <- concaveman(corner)
+
+plot(border)
+
+# ---- Filtering buffers -------------------------------------------------------
+
+#TODO: Noch zu viele variablen, teilweise doppelt und durcheinander, muss aufräumen
+
+# Empty columns
+centroid$neighbour_50m_filtered <- NA
+centroid$neighbour_50m_outside_estimate <- NA
+centroid$building_area_full <- NA
+centroid$building_area_outside_estimate <- NA
+centroid$building_area_intersect <- NA
+centroid$buffer_area_inside <- NA
+centroid$buffer_area_outside <- NA
+centroid$area_density_inside <- NA
+centroid$area_outside_estimate <- NA
+centroid$building_area_estimated_total <- NA
+
+#TODO: Variablen besser benennen und einheitlicher
 for (i in seq_len(nrow(buffer_50m))) {
   # BBuffer current centroid 
   buffer_i <- buffer_50m[i, ]
+  # addint all buildings touching the buffer[i] to the list
+  neighbour_ids <- count_neighbour_50[[i]]
+  buildings_all_50 <- merged_data[neighbour_ids, ]
   
-  # All centroids within the buffer (including current one)
-  neighbour <- count_neighbour_50[[i]]
-  all_polygone <- merged_data[neighbour, ]
+  # Possibly unnecessary loop, but currently too scared to remove it
+  if (nrow(buildings_all_50) == 0) next
   
-  # Calculating intersection
-  intersect <- st_intersection(all_polygone, buffer_i)
+  #Area for each building
+  building_area <- st_area(buildings_all_50)
+  # clipping buildings with buffer
+  building_intersect <- st_intersection(buildings_all_50, buffer_i)
+  #remaining area of each building after clipping
+  area_intersect <- st_area(building_intersect)
+  # adding amount of building area of each buffer to column
+  centroid$building_area_intersect[i] <- sum(as.numeric(area_intersect))
+  centroid$building_area_full[i] <- sum(as.numeric(area_intersect))
+  # percentage of the remaining area of each building
+  building_area_intersect_percentage <- as.numeric((area_intersect / building_area) * 100)
   
-  # Calculate total area and potential intersection area
-  area <- st_area(all_polygone)
-  area_intersect <- st_area(intersect)
-  
-  # Calculating percentage share
-  area_precentage <- as.numeric((area_intersect / area)*100)
-  
-  # Only keeping Buildings with more at least 50% of the area within the buffer
-  neighbours_filtered <- neighbour[area_precentage >= 50]
-  
-  #  excluding centroid[i] from counting
+  #---- Counting Neighbours ----- 
+  # Only keeping buildings whose area is at least 50% within the buffer zone, but without the Building itself
+  neighbours_filtered <- neighbour_ids[building_area_intersect_percentage >= 50]
   neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
+  # adding amount of neighbours to column
+  centroid$neighbour_50m_filtered[i] <- length(neighbours_filtered)
   
-  # Counting
-  neighbour_count_50m_filtered[i] <- length(neighbours_filtered)
+  #---- Lalalala ----
+  # total buffer area (always the same)
+  # TODO: Als Variable abspeichern, anstatt imemr neu zu berechnen
+  buffer_total_area <- st_area(buffer_i)
+  # Calculating area of buffer inside border
+  buffer_inside_border <- st_area(st_intersection(buffer_i, border))
+  centroid$buffer_area_inside[i] <- as.numeric(buffer_inside_border)
+  #Calculating area of buffer outside border
+  buffer_outside_border <- max(0, as.numeric(buffer_total_area - buffer_inside_border))
+  centroid$buffer_area_outside[i] <- buffer_outside_border
+  
+  #TODO: if durch for ersetzen
+  if (as.numeric(buffer_inside_border) > 0) {
+    #---- Number of Neighbours ----
+    # Building density
+    neighbour_density <- centroid$neighbour_50m_filtered[i] / as.numeric(buffer_inside_border)
+    # Estimating density outside border
+    centroid$neighbour_50m_outside_estimate[i] <- neighbour_density * buffer_outside_border
+    
+    #---- Area Density ----
+    # Dichte der gesamten Gebäude(m²) pro m² Fläche
+    centroid$area_density_inside[i] <- centroid$building_area_full[i] / as.numeric(buffer_inside_border)
+    centroid$area_outside_estimate[i] <- area_density_inside * buffer_outside_border
+    #total estimated building area in buffer
+    centroid$building_area_estimated_total[i] <- centroid$building_area_full[i] + centroid$area_outside_estimate[i]
+    
+    
+  } else {
+    centroid$neighbour_50m_outside_estimate[i] <- NA
+    centroid$building_area_outside_estimate[i] <- NA
+  }
 }
 
-centroid$neighbour_50m_filtered <- neighbour_count_50m_filtered
+centroid$neighbour_50m_total_estimate <- centroid$neighbour_50m_filtered + centroid$neighbour_50m_outside_estimate
+centroid$neighbour_50m_total_estimate_rounded <- round(centroid$neighbour_50m_total_estimate)
 
-# Join Counts to merged_data without geometry
+
+centroid$building_density_total <- centroid$building_area_estimated_total / buffer_area_50m
+
+
+
 merged_data <- merged_data %>%
-  left_join(centroid %>% st_drop_geometry() %>% select(poly_id, neighbour_50m_filtered),
+  left_join(
+    centroid %>%
+      st_drop_geometry() %>%
+      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total),
     by = "poly_id"
   )
 
-# TODO: Habe jetzt zwei mal Fläche berechnet, muss eines noch raus schmeißen
-# TODO: Map graph
-# TODO: BAreplot counting Graph
-# TODO: Combine bareplot and Map
-# TODO: Thinking about art der darstellung barplot.....smooth?
+ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_total_estimate_rounded)), color = NA) +
+  scale_fill_viridis_d(option = "H")+
+  theme(
+    legend.position = "none"
+  )
 
-#---- Creating Map ----
+#--- Map 2 -----------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
 
-map_neighbour_50 <- ggplot() +
-  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_filtered)), color = NA) +
-  scale_fill_viridis_d(option = "plasma") +
+map_neighbour_50_2 <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_total_estimate_rounded)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
     subtitle = "Number of neighbouring buildings within a radius of 50 metres"
@@ -313,47 +230,295 @@ map_neighbour_50 <- ggplot() +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color="#F2F2DE", size = 25),
-    plot.subtitle = element_text(color="#F2F2DE", size = 18),
-    plot.background = element_rect(fill = "grey30", color = NA),
-    plot.margin = margin(t = 5, l = 1, unit = "mm"),)
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
 
-map_neighbour_50
 
-bar_50 <- ggplot(merged_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
+#---- Creating Barplot ---------------------------------------------------------
+
+
+bar_50_2 <- ggplot(merged_data, aes(x = factor(neighbour_50m_total_estimate_rounded), fill = factor(neighbour_50m_total_estimate_rounded))) +
   geom_bar() +
-  scale_fill_viridis_d(option = "plasma") +
+  scale_fill_viridis_d(option = "H") +
   labs(
-    x = "Neighbouring Buildings within a radius of 50 m",
+    x = "Number of estimated buildings within a radius of 50 metres",
     y = "Count",
     fill = "Type"
   ) +
-  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured", "2" = "Structured"))) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
   scale_x_discrete(breaks=as.character(seq(0,54,5)))+
   scale_y_continuous(breaks = seq(0, 500, 100))+
   geom_hline(
     yintercept = seq(0, 500, 100),
-    color = "white",
+    color = "#F2F2DE",
     linetype = "dotted",
     linewidth = 0.3 
   )+
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(angle = 0, vjust = 1, hjust = 0.5, size = 10,
+    axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
                                colour = "#F2F2DE",
                                family = "Source Sans 3"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", face = "bold"),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", face = "bold"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank()
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
+    # Changing header with strip.
+    strip.background = element_blank(),
+    strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    panel.spacing = unit(0.7, "cm")
   )
 
-#---- Combine BArplots and map ----
+
+#---- Combine BArplots and maps ------------------------------------------------
+
+combined_map_bar_2 <- map_neighbour_50_2 +
+  inset_element(bar_50_2, left = 0.10, right= 0.90, bottom = 0, top = 0.30)
+#inset_element(cairo_plot, left = 0.1, right= 0.30, bottom = 0.05, top = 0.35)
+combined_map_bar_2
+
+
+ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height = 18, units = "cm", dpi = 600)
+
+###############################################################################
+#--- Map 3 - Density estimated -----------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+map_density <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(building_density_total)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Number of building density within a radius of 50 metres"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+
+ggplot()+
+  geom_sf(data = merged_data, aes(fill = factor(building_density_total)), color = NA)
+#---- Creating Barplot ---------------------------------------------------------
+
+
+bar_density <- ggplot(merged_data, aes(x = factor(building_density_total), fill = factor(building_density_total))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Building denisty within a radius of 50 metres",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  #scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  #scale_y_continuous(breaks = seq(0, 500, 100))+
+  # geom_hline(
+  #   yintercept = seq(0, 500, 100),
+  #   color = "#F2F2DE",
+  #   linetype = "dotted",
+  #   linewidth = 0.3 
+  #)+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+                               colour = "#F2F2DE",
+                               family = "Source Sans 3"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
+    # Changing header with strip.
+    strip.background = element_blank(),
+    strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_density
+
+#---- Combine BArplots and maps ------------------------------------------------
+
+combined_map_bar_2 <- map_neighbour_50_2 +
+  inset_element(bar_50_2, left = 0.10, right= 0.90, bottom = 0, top = 0.30)
+#inset_element(cairo_plot, left = 0.1, right= 0.30, bottom = 0.05, top = 0.35)
+combined_map_bar_2
+
+
+ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height = 18, units = "cm", dpi = 600)
+
+#################
+################
+################
+#---- Creating Map -------------------------------------------------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+map_neighbour_50 <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_filtered)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Number of neighbouring buildings within a radius of 50 metres"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+    )
+
+map_neighbour_50
+
+#---- Creating Barplot ---------------------------------------------------------
+
+
+bar_50 <- ggplot(merged_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Number of buildings within a radius of 50 metres",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  scale_y_continuous(breaks = seq(0, 500, 100))+
+  geom_hline(
+    yintercept = seq(0, 500, 100),
+    color = "#F2F2DE",
+    linetype = "dotted",
+    linewidth = 0.3 
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+                               colour = "#F2F2DE",
+                               family = "Source Sans 3"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", size = 0.3),
+    # Changing header with strip.
+    strip.background = element_blank(),
+    strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_50
+
+#---- density plot --------
+# merged_data %>%
+#   filter(neighbour_50m_filtered>-1)%>%
+#   ggplot(aes(x=neighbour_50m_filtered))+
+#     geom_density()+
+#     scale_fill_viridis_d(option = "plasma")
+
+#---- Overview map -------------------------------------------------------------
+library(osmdata)
+
+cairo_boundary <- getbb("Cairo, Egypt") %>% 
+  opq() %>%
+  add_osm_feature(key = "boundary", value = "administrative") %>%
+  add_osm_feature(key = "name", value = "Cairo") %>%
+  osmdata_sf()
+
+cairo_outline <- cairo_boundary$osm_multipolygons
+
+# Bounding box around Buildings
+box_buildings <- st_bbox(merged_data) %>% st_as_sfc() %>% st_sf()
+
+# Borders of Cairo
+cairo <- getbb("Cairo, Egypt", format_out = "sf_polygon")
+
+# Plotting Cairo Map with bounding box of Buildings
+cairo_plot <- ggplot() +
+  geom_sf(data = cairo, fill = "#1a1a1a", color = "#F2F2DE")+
+  geom_sf(data = box_buildings, fill = NA, color = "red", size = 1)+
+  theme_void()+
+  labs(
+    title= "Cairo Governorate"
+  )+
+  theme(
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    text = element_text(family = "Source Sans 3", colour = "#F2F2DE", face = "bold")
+  )
+
+cairo_plot
+#---- Combine BArplots and maps ------------------------------------------------
+
 combined_map_bar <- map_neighbour_50 +
-  inset_element(bar_50, left = 0.01, right= 0.30, bottom = 0.05, top = 0.35)
+  inset_element(bar_50, left = 0.10, right= 0.90, bottom = 0, top = 0.30)
+  #inset_element(cairo_plot, left = 0.1, right= 0.30, bottom = 0.05, top = 0.35)
 combined_map_bar
-  
+
+
+ggsave("test.png", combined_map_bar, width = 30, height = 18, units = "cm", dpi = 600)
+
+
+#---- Area Buildings -----------------------------------------------------------
+
+study_area <- st_union(merged_data)
+plot(study_area)
+
+
+#---- TODO ---------------------------------------------------------------------
+# TODO: Map graph
+# TODO: BAreplot counting Graph
+# TODO: Combine bareplot and Map
+# TODO: Thinking about art der darstellung barplot.....smooth?
+# TODO: Kleine Karte Cairo mit markierung der Stelle
