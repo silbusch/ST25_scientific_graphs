@@ -188,6 +188,14 @@ for (i in seq_len(nrow(buffer_50m))) {
     centroid$neighbour_50m_outside_estimate[i] <- NA
     centroid$building_area_outside_estimate[i] <- NA
   }
+  
+  if (length(neighbours_filtered) > 0) {
+    filtered_buildings <- merged_data[neighbours_filtered, ]
+    avg_area <- mean(as.numeric(st_area(filtered_buildings)))
+    centroid$avg_neighbour_area[i] <- avg_area
+  } else {
+    centroid$avg_neighbour_area[i] <- NA
+  }
 }
 
 centroid$neighbour_50m_total_estimate <- centroid$neighbour_50m_filtered + centroid$neighbour_50m_outside_estimate
@@ -195,6 +203,7 @@ centroid$neighbour_50m_total_estimate_rounded <- round(centroid$neighbour_50m_to
 
 
 centroid$building_density_total <- centroid$building_area_estimated_total / buffer_area_50m
+centroid$building_density_total_rounded <- round(merged_data$building_density_total, 2)
 
 
 
@@ -202,16 +211,15 @@ merged_data <- merged_data %>%
   left_join(
     centroid %>%
       st_drop_geometry() %>%
-      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total),
+      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total_rounded),
     by = "poly_id"
   )
 
-ggplot() +
-  geom_sf(data = merged_data, aes(fill = factor(neighbour_50m_total_estimate_rounded)), color = NA) +
-  scale_fill_viridis_d(option = "H")+
-  theme(
-    legend.position = "none"
-  )
+ggplot(merged_data, aes(x = factor(building_density_total_rounded))) +
+  geom_bar(fill = viridisLite::viridis(1, option = "plasma")) +
+  scale_x_discrete(breaks = seq(0, 1, by = 0.1))
+
+
 
 #--- Map 2 -----------------------
 bbox <- st_bbox(merged_data)
@@ -247,7 +255,7 @@ map_neighbour_50_2 <- ggplot() +
 #---- Creating Barplot ---------------------------------------------------------
 
 
-bar_50_2 <- ggplot(merged_data, aes(x = factor(neighbour_50m_total_estimate_rounded), fill = factor(neighbour_50m_total_estimate_rounded))) +
+bar_50_2 <- ggplot(merged_data, aes(x = factor(building_density_total_rounded), fill = factor(building_density_total_rounded))) +
   geom_bar() +
   scale_fill_viridis_d(option = "H") +
   labs(
@@ -285,6 +293,7 @@ bar_50_2 <- ggplot(merged_data, aes(x = factor(neighbour_50m_total_estimate_roun
     panel.spacing = unit(0.7, "cm")
   )
 
+bar_50_2
 
 #---- Combine BArplots and maps ------------------------------------------------
 
@@ -381,6 +390,61 @@ combined_map_bar_2
 
 
 ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height = 18, units = "cm", dpi = 600)
+
+
+################################################################################
+################################################################################
+# individual Building area
+merged_data$building_area <- round(as.numeric(st_area(merged_data)))
+
+# classify
+breaks <- seq(0, 4488 , by = 100)
+
+ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H")+
+  theme(
+    legend.position = "none")
+
+ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(building_area)), color = NA) +
+  scale_fill_viridis_d(option = "H")+
+  theme(
+    legend.position = "none")
+#---- waffle Chart ----
+####
+
+library(viridis)
+
+merged_data <- merged_data %>%
+  mutate(
+    building_area_class = cut(
+      building_area,
+      breaks = seq(0, max(building_area, na.rm = TRUE) + 100, by = 100),
+      include.lowest = TRUE,
+      right = FALSE
+    )
+  )
+
+merged_data <- merged_data %>%
+  arrange(building_area) %>%
+  mutate(
+    id = row_number(),
+    x = (id - 1) %% 100,
+    y = -((id - 1) %/% 100)
+  )
+
+ggplot(merged_data, aes(x = x, y = y, fill = building_area_class)) +
+  geom_tile(color = "white", size = 0.1) +
+  coord_equal() +
+  scale_fill_viridis_d(option = "H", name = "Building Size (m²)") +
+  theme_void(base_family = "Source Sans 3") +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  ) +
+  labs(title = "Waffle Chart: Sorted by Building Size")
+
 
 #################
 ################
