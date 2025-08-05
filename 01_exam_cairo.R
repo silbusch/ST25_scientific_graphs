@@ -178,7 +178,9 @@ for (i in seq_len(nrow(buffer_50m))) {
     
     #---- Area Density ----
     # Dichte der gesamten Gebäude(m²) pro m² Fläche
-    centroid$area_density_inside[i] <- centroid$building_area_full[i] / as.numeric(buffer_inside_border)
+    area_density_inside <- centroid$building_area_full[i] / as.numeric(buffer_inside_border)
+    centroid$area_density_inside[i] <- area_density_inside
+    
     centroid$area_outside_estimate[i] <- area_density_inside * buffer_outside_border
     #total estimated building area in buffer
     centroid$building_area_estimated_total[i] <- centroid$building_area_full[i] + centroid$area_outside_estimate[i]
@@ -188,7 +190,7 @@ for (i in seq_len(nrow(buffer_50m))) {
     centroid$neighbour_50m_outside_estimate[i] <- NA
     centroid$building_area_outside_estimate[i] <- NA
   }
-  
+  #----Standard deviation within a 50 m buffer of the distance
   if (length(neighbours_filtered) > 0) {
     filtered_buildings <- merged_data[neighbours_filtered, ]
     avg_area <- mean(as.numeric(st_area(filtered_buildings)))
@@ -196,32 +198,327 @@ for (i in seq_len(nrow(buffer_50m))) {
   } else {
     centroid$avg_neighbour_area[i] <- NA
   }
+  neighbour_ids <- count_neighbour_50[[i]]
+  neighbour_ids <- neighbour_ids[neighbour_ids != i]
+  
+  if (length(neighbour_ids) >= 3) {
+    center_i <- st_coordinates(centroid[i, ])
+    neighbour_coords <- st_coordinates(centroid[neighbour_ids, ])
+    dists <- sqrt((neighbour_coords[,1] - center_i[1])^2 + (neighbour_coords[,2] - center_i[2])^2)
+    centroid$distance_sd_neighbours[i] <- sd(dists)
+  } else {
+    centroid$distance_sd_neighbours[i] <- NA
+  }
+  }
+  
+  centroid$distance_sd_neighbours <- dist_sd
 }
 
+# rounded estimated neighbours
 centroid$neighbour_50m_total_estimate <- centroid$neighbour_50m_filtered + centroid$neighbour_50m_outside_estimate
 centroid$neighbour_50m_total_estimate_rounded <- round(centroid$neighbour_50m_total_estimate)
 
-
+#rounded estimated building area density
 centroid$building_density_total <- centroid$building_area_estimated_total / buffer_area_50m
 centroid$building_density_total_rounded <- round(merged_data$building_density_total, 2)
 
-
+# left join
+merged_data <- merged_data %>%
+  left_join(
+    centroid %>%
+      st_drop_geometry() %>%
+      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total_rounded, building_density_total),
+    by = "poly_id"
+  )
 
 merged_data <- merged_data %>%
   left_join(
     centroid %>%
       st_drop_geometry() %>%
-      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total_rounded),
+      select(poly_id, distance_sd_neighbours),
     by = "poly_id"
   )
+
+merged_data$distance_sd_neighbours_round <- round(as.numeric(merged_data$distance_sd_neighbours), 3)
+
 
 ggplot(merged_data, aes(x = factor(building_density_total_rounded))) +
   geom_bar(fill = viridisLite::viridis(1, option = "plasma")) +
   scale_x_discrete(breaks = seq(0, 1, by = 0.1))
 
+#---- calculating the orientation of each building -----------------------------
+# get_orientation <- function(polygon) {
+#   lines <- st_cast(polygon, "LINESTRING")
+#   coords <- st_coordinates(lines)[, 1:2]
+#   
+#   diffs <- diff(coords)
+#   lengths <- sqrt(diffs[,1]^2 + diffs[,2]^2)
+#   
+#   if (length(lengths) == 0) return(NA)  # falls ein Fehler auftritt
+#   
+#   i_max <- which.max(lengths)
+#   
+#   dx <- diffs[i_max, 1]
+#   dy <- diffs[i_max, 2]
+#   
+#   angle <- atan2(dy, dx) * (180 / pi)
+#   if (angle < 0) angle <- angle + 360
+#   return(angle)
+# }
+# 
+# merged_data_poly <- st_cast(merged_data, "POLYGON")
+# 
+# merged_data_poly$orientation_angle <- sapply(1:nrow(merged_data_poly), function(i) {
+#   get_orientation(merged_data_poly[i, ])
+# })
+# 
+# # Divide angles
+# angle_to_direction <- function(angle) {
+#   directions <- c("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+#   breaks <- seq(-22.5, 360, by = 45)
+#   angle_mod <- (angle + 22.5) %% 360
+#   return(directions[findInterval(angle_mod, breaks)])
+# }
+# 
+# merged_data_poly$orientation_direction <- sapply(merged_data_poly$orientation_angle, angle_to_direction)
+
+#----different ------------------
+get_orientation <- function(polygon) {
+  lines <- st_cast(polygon, "LINESTRING")
+  coords <- st_coordinates(lines)[, 1:2]
+  
+  diffs <- diff(coords)
+  lengths <- sqrt(diffs[,1]^2 + diffs[,2]^2)
+  
+  if (length(lengths) == 0) return(NA)
+  
+  i_max <- which.max(lengths)
+  
+  dx <- diffs[i_max, 1]
+  dy <- diffs[i_max, 2]
+  
+  angle <- atan2(dy, dx) * (180 / pi)
+  if (angle < 0) angle <- angle + 360
+  return(angle)
+}
+
+merged_data_poly <- st_cast(merged_data, "POLYGON")
+
+merged_data_poly$orientation_angle <- sapply(1:nrow(merged_data_poly), function(i) {
+  get_orientation(merged_data_poly[i, ])
+})
 
 
-#--- Map 2 -----------------------
+angle_to_axis <- function(angle) {
+  if (is.na(angle)) return(NA)
+  
+  angle_mod <- angle %% 180  
+  
+  if (angle_mod < 22.5 || angle_mod >= 157.5) {
+    return("North-South")
+  } else if (angle_mod >= 67.5 && angle_mod < 112.5) {
+    return("East-West")
+  } else if (angle_mod >= 22.5 && angle_mod < 67.5) {
+    return("Northeast-Southwest")
+  } else if (angle_mod >= 112.5 && angle_mod < 157.5) {
+    return("Northwest-Southeast")
+  } else {
+    return(NA)
+  }
+}
+
+merged_data_poly$orientation_axis <- sapply(merged_data_poly$orientation_angle, angle_to_axis)
+
+merged_data <- merged_data %>%
+  left_join(
+    merged_data_poly %>%
+      st_drop_geometry() %>%
+      select(poly_id, orientation_axis),
+    by = "poly_id"
+  )
+
+
+#---- Map ----------------------------------------------------------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+orientation_colors <- c(
+  "N"        = "#FF0000",   
+  "NE"       = "#FFA500",   
+  "E"        = "#FFFF00",   
+  "SE"       = "#00FF00",   
+  "S"        = "#00FFFF",   
+  "SW"       = "#0000FF",   
+  "W"        = "#8A2BE2",   
+  "NW"       = "#FF1493",   
+  "N_end"    = "#FF0000"
+)
+
+map_orientation <- ggplot() +
+  geom_sf(data = merged_data_poly, aes(fill = factor(orientation_direction)), color = NA) +
+  scale_fill_manual(values = orientation_colors) +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Primary building orientation by dominant axis"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_orientation
+
+map_sd_different <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(orientation_axis)), color = NA) +
+  scale_fill_viridis_d(option = "D") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Variation in distances to neighbors (within 50m) used as a proxy for spatial order"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_sd_different
+ #### Standard Deviation distance 50m ##########################################
+#---- Map ----------------------------------------------------------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+map_sd <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(distance_sd_neighbours_round)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Variation in distances to neighbors (within 50m) used as a proxy for spatial order"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_sd
+
+map_sd_2 <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(distance_sd_neighbours)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Variation in distances to neighbors (within 50m) used as a proxy for spatial order"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_sd_2
+
+#---- Creating Barplot ---------------------------------------------------------
+ggplot(merged_data, aes(x = factor(distance_sd_neighbours_round), fill = factor(distance_sd_neighbours))) +
+  geom_bar() +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")))+
+  theme(
+    legend.position ="none"
+  )
+
+
+bar_sd <- ggplot(merged_data, aes(x = factor(distance_sd_neighbours_round), fill = factor(distance_sd_neighbours_round))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Building proximity variation",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  # scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  # scale_y_continuous(breaks = seq(0, 500, 100))+
+  # geom_hline(
+  #   yintercept = seq(0, 500, 100),
+  #   color = "#F2F2DE",
+  #   linetype = "dotted",
+  #   linewidth = 0.3 
+  #)+
+  theme(
+    legend.position = "none"#,
+    # text = element_text(family = "Source Sans 3"),
+    # axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+    #                            colour = "#F2F2DE",
+    #                            family = "Source Sans 3"),
+    # axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    # axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    # axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    # panel.background = element_rect(fill = NA, color = NA),
+    # plot.background = element_rect(fill = NA, color = NA),
+    # panel.grid.major = element_blank(),
+    # panel.grid.minor = element_blank(),
+    # axis.ticks.y = element_blank(),
+    # axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
+    # # Changing header with strip.
+    # strip.background = element_blank(),
+    # strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    # panel.spacing = unit(0.7, "cm")
+  )
+
+bar_sd
+
+
+
+#### Estimated Neighbours ######################################################
+#---- Map ----------------------------------------------------------------------
 bbox <- st_bbox(merged_data)
 buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
 
@@ -251,7 +548,6 @@ map_neighbour_50_2 <- ggplot() +
     plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
   )
 
-
 #---- Creating Barplot ---------------------------------------------------------
 
 
@@ -259,7 +555,7 @@ bar_50_2 <- ggplot(merged_data, aes(x = factor(building_density_total_rounded), 
   geom_bar() +
   scale_fill_viridis_d(option = "H") +
   labs(
-    x = "Number of estimated buildings within a radius of 50 metres",
+    x = "Number of (estimated) buildings within a radius of 50 metres",
     y = "Count",
     fill = "Type"
   ) +
@@ -305,8 +601,11 @@ combined_map_bar_2
 
 ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height = 18, units = "cm", dpi = 600)
 
-###############################################################################
+
+
+#### Desnity ###################################################################
 #--- Map 3 - Density estimated -----------------------
+
 bbox <- st_bbox(merged_data)
 buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
 
@@ -393,29 +692,42 @@ ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height
 
 
 ################################################################################
+#### Individual Building Area ##################################################
 ################################################################################
+
 # individual Building area
 merged_data$building_area <- round(as.numeric(st_area(merged_data)))
 
 # classify
-breaks <- seq(0, 4488 , by = 100)
+merged_data$building_area_class <- floor(merged_data$building_area / 50) 
 
-ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
-  geom_bar() +
-  scale_fill_viridis_d(option = "H")+
-  theme(
-    legend.position = "none")
+# How many Buildings per class?
+c <- merged_data %>%
+  count(building_area_class)
+
+# # classify
+# breaks <- seq(0, 4488 , by = 100)
+# 
+# ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
+#   geom_bar() +
+#   scale_fill_viridis_d(option = "H")+
+#   facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")))+
+#   theme(
+#     legend.position = "none")
+
 
 ggplot() +
   geom_sf(data = merged_data, aes(fill = factor(building_area)), color = NA) +
   scale_fill_viridis_d(option = "H")+
   theme(
     legend.position = "none")
-#---- waffle Chart ----
-####
+
+#---- waffle Chart -------------------------------------------------------------
+#TODO: Waffle Chart is noch wrong
 
 library(viridis)
 
+# classify building area in 100-steps
 merged_data <- merged_data %>%
   mutate(
     building_area_class = cut(
@@ -434,7 +746,7 @@ merged_data <- merged_data %>%
     y = -((id - 1) %/% 100)
   )
 
-ggplot(merged_data, aes(x = x, y = y, fill = building_area_class)) +
+ggplot(merged_data, aes(x = x, y = y, fill = building_area)) +
   geom_tile(color = "white", size = 0.1) +
   coord_equal() +
   scale_fill_viridis_d(option = "H", name = "Building Size (m²)") +
@@ -445,6 +757,147 @@ ggplot(merged_data, aes(x = x, y = y, fill = building_area_class)) +
   ) +
   labs(title = "Waffle Chart: Sorted by Building Size")
 
+
+#---- Creating Map -------------------------------------------------------------
+bbox <- st_bbox(merged_data)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+map_area <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(building_area)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Distribution of building sizes"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+
+map_area
+
+#---- Creating Barplot ---------------------------------------------------------
+library(ggbreak)
+
+bar_area <- ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Building area [m²]",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  # scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  # scale_y_continuous(breaks = seq(0, 500, 100))+
+  # geom_hline(
+  #   yintercept = seq(0, 500, 100),
+  #   color = "#F2F2DE",
+  #   linetype = "dotted",
+  #   linewidth = 0.3)+
+  theme(
+    legend.position = "none"
+    # text = element_text(family = "Source Sans 3"),
+    # axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+    #                            colour = "#F2F2DE",
+    #                            family = "Source Sans 3"),
+    # axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    # axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    # axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    # panel.background = element_rect(fill = NA, color = NA),
+    # plot.background = element_rect(fill = NA, color = NA),
+    # panel.grid.major = element_blank(),
+    # panel.grid.minor = element_blank(),
+    # axis.ticks.y = element_blank(),
+    # axis.ticks = element_line(color = "#F2F2DE", size = 0.3),
+    # # Changing header with strip.
+    # strip.background = element_blank(),
+    # strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    # panel.spacing = unit(0.7, "cm")
+  )
+
+bar_area
+# most common size for unstructured buildings is 120m² n= 67
+bar_area_scale <- bar_area + 
+  scale_y_break(c(70, 665), scales = 0.3)+
+  annotate("segment", x = 0.5, xend = Inf, y = 70, yend = 70,
+           linetype = "dashed", color = "red", linewidth = 0.5)
+
+bar_area_scale
+#------------
+
+combined_map_area <- map_area +
+  inset_element(bar_area, left = 0.10, right= 0.90, bottom = 0, top = 0.30)
+#inset_element(cairo_plot, left = 0.1, right= 0.30, bottom = 0.05, top = 0.35)
+combined_map_area
+
+
+ggsave("cairo_building_area.png", combined_map_area, width = 15, height = 18, units = "cm", dpi = 600)
+################################################################################
+#### Cluster ##########################################################
+################################################################################
+
+
+library(dbscan)
+
+# Useless cluster
+coords <- st_coordinates(centroid)
+
+clusters <- dbscan(coords, eps = 50, minPts = 4)
+
+
+centroid$cluster <- as.factor(clusters$cluster)
+
+ggplot(centroid) +
+  geom_sf(aes(color = cluster)) +
+  scale_fill_viridis_d(option = "H")+
+  theme_minimal()
+
+################################################################################
+#### Building density ##########################################################
+################################################################################
+
+map_density_estimated <- ggplot() +
+  geom_sf(data = merged_data, aes(fill = factor(building_density_total.y)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Building density Index"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+
+map_density_estimated
 
 #################
 ################
