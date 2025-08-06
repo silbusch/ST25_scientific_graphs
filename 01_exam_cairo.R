@@ -57,7 +57,10 @@ merged_data$poly_id <- seq_len(nrow(merged_data))
 # 
 # plot(r_polyid)
 # plot(r_type)
-
+################################################################################
+################################################################################
+#### CLACLULATION PART##########################################################
+################################################################################
 ################################################################################
 #---- Number of buildings in the buffer zone of each building ------------------
 
@@ -68,6 +71,7 @@ plot(centroid_1[4], pch=20)
 # 50m buffer
 buffer_50m <- st_buffer(centroid_1, dist = 50)
 
+# Area of Buffer
 buffer_area_50m <- pi * 50^2
 
 # Counting the number of centroids within the buffer for each point
@@ -256,7 +260,7 @@ merged_data <- merged_data %>%
   left_join(
     centroid %>%
       st_drop_geometry() %>%
-      select(poly_id, distance_sd_neighbours),
+      select(poly_id, distance_sd_neighbours, neighbour_50m),
     by = "poly_id"
   )
 
@@ -360,23 +364,425 @@ merged_data_edge <- merged_data %>%
     by = "poly_id"
   )
 
+# individual Building area
+merged_data$building_area_individual <- round(as.numeric(st_area(merged_data)))
+
+centroid_edge <- centroid_edge %>%
+  left_join(
+    merged_data %>% st_drop_geometry() %>% select(poly_id, building_area_individual, neighbour_50m),
+    by = "poly_id"
+  )
+# classify
+merged_data$building_area_class <- floor(merged_data$building_area / 50) 
+
+# How many Buildings per class?
+c <- merged_data %>%
+  count(building_area_class)
+
+# # classify
+# breaks <- seq(0, 4488 , by = 100)
+# 
+# ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
+#   geom_bar() +
+#   scale_fill_viridis_d(option = "H")+
+#   facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")))+
+#   theme(
+#     legend.position = "none")
+
+##### Chain buildings and area #################################################
+library(igraph)
+
+# Matrix of touching building
+touch_list <- st_touches(merged_data)
+
+graph <- graph_from_adj_list(touch_list, mode = "all")
+
+components <- components(graph)
+
+merged_data$group_id <- components$membership
+
+#solo buildings
+deg <- degree(graph)
+merged_data$group_id[deg == 0] <- 0
+
+#solor buildings become value 0
+merged_data$group_id[merged_data$group_id != 0] <- merged_data$group_id[merged_data$group_id != 0] + 1
+
+#Counting Buildings oer group_id and adding them in new column "group_count"
+merged_data <- merged_data %>%
+  add_count(group_id, name = "group_count")
+
+#Calculating area per group
+merged_data <- merged_data %>%
+  group_by(group_id) %>%
+  mutate(group_area = sum(building_area_individual, na.rm = TRUE)) %>%
+  ungroup()
+
+# Keeping area for solo buildings
+merged_data <- merged_data %>%
+  mutate(
+    group_area_adjusted = if_else(
+      group_id == 0,
+      building_area_individual,
+      group_area
+    )
+  )
+
+#-----Calculating Indizes -----------------------------------------------------------------
+#area of Buffer'
+buffer_area_50m
+# Building Area within Buffer
+centroid_edge$building_area_intersect
+#Area of individual Buildings
+centroid_edge$building_area_individual
+
+
+#....Surrounding index---dont know...-------------------------------------------
+building_area_individual <- centroid_edge$building_area_individual
+building_area_buffer <- centroid_edge$building_area_intersect
+free_area <- buffer_area_50m - centroid_edge$building_area_intersect
+buffer_area_50m
+
+# dont knowif this could be intresting
+centroid_edge$surrounding_index <-  round(as.numeric(((building_area_individual/building_area_buffer)* (1*(free_area/buffer_area_50m)))),2)
+
+#---- Density-Index ------------------------------------------------------------
+building_area_individual
+building_area_buffer
+
+centroid_edge$building_area_density_index <- round(as.numeric((building_area_individual/building_area_buffer)),2)
+
+#---- Building dominanz ----------------------------------------------
+#Mixing relative area with neighbour density
+
+# A high value means that a big Buildings is in a high density environment
+# mean value means that the a big building is in a loose neighbourhood or a small building in a high density neighbourhood
+# small value: small Building with view neighbours --> less spatial dominanz
+building_area_intersect <- centroid_edge$building_area_intersect
+neighbours_count <- centroid_edge$neighbour_50m_filtered
+
+centroid_edge$neighbour_building_dominanz <- round((building_area_individual /building_area_intersect) *neighbours_count,2)
+
+
+#---- Left join indices --------------------------------------------------------
+
+merged_data_edge <- merged_data_edge %>%
+  left_join(
+    centroid_edge %>%
+      st_drop_geometry() %>%
+      select(poly_id, surrounding_index, building_area_density_index, neighbour_building_dominanz),
+    by = "poly_id"
+  )
+
+p_map <- ggplot() +
+  geom_sf(data = merged_data_edge, aes(fill = surrounding_index), color = NA)+
+  theme(
+    legend.position = "none"
+  )
+################################################################################
+################################################################################
+#### PLOTTING PART #############################################################
+################################################################################
+################################################################################
+
+#### Connected Buildings #######################################################
+#Used Dataset: merged_data'
+#Used Parameters:
+#
+#
+#
+#
+#---- Map -----
+
+#---- Matrix Plot ----
+library(cowplot)
+
+#no solo buildings
+grouped_data <- merged_data %>%
+  filter(group_id != 0)
+
+#classify data in three groups with same range
+classify_minmax <- function(x, n = 3) {
+  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
+  cut(x, breaks = breaks, include.lowest = TRUE, labels = FALSE)
+}
+
+
+non_solo_buildings <- grouped_data %>%
+  mutate(
+    area_class = classify_minmax(group_area_adjusted),
+    count_class = classify_minmax(group_count),
+    group_matrix = paste0(area_class, "-", count_class)
+  )
+
+# Checking classes
+print_class_breaks <- function(x, n = 3, varname = "") {
+  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
+  cat(paste0("Breaks for ", varname, ":\n"))
+  print(breaks)
+  invisible(breaks)
+}
+
+print_class_breaks(non_solo_buildings$group_area_adjusted, n = 3, varname = "group_area_adjusted")
+print_class_breaks(non_solo_buildings$group_count, n = 3, varname = "group_count")
+
+#own category for solo buildings
+solo_buildings <- solo_buildings %>%
+  mutate(group_matrix = "solo")
+
+#combine
+merged_data_classified <- bind_rows(non_solo_buildings, solo_buildings)
+
+# colors
+bi_colors <- c(
+  "1-1" = "#e9e9e9ff", "2-1" = "#e9dda9ff", "3-1" = "#e8ac00ff",
+  "1-2" = "#adcbd5ff", "2-2" = "#acaaadff", "3-2" = "#a96100ff",
+  "1-3" = "#4c97b6ff", "2-3" = "#336081ff", "3-3" = "#000000",
+  "solo" = "#4F0000"
+)
+
+
+#map
+
+p_map <- ggplot() +
+  geom_sf(data = merged_data_classified, aes(fill = group_matrix), color = NA) +
+  scale_fill_manual(values = bi_colors, name = "Group Composition") +
+  ##############theme_minimal() +
+  coord_sf() +
+  labs(title = "Building Connectivity and Area",
+       subtitle = "Group size vs. Group area (excluding solo buildings)") +
+  theme(
+    plot.margin = margin(5, 5, 5, 5),
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color = "#F2F2DE", size = 25, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 16),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank()
+  )
+p_map
+
+#matrix legend
+legend_df <- expand.grid(
+  area_class = 1:3,
+  count_class = 1:3
+) %>%
+  mutate(
+    group_matrix = paste0(area_class, "-", count_class),
+    fill = bi_colors[group_matrix]
+  )
+
+legend_plot <- ggplot(legend_df, aes(x = area_class, y = count_class, fill = fill)) +
+  geom_tile() +
+  scale_fill_identity() +
+  scale_x_continuous(breaks = 1:3, labels = c("Small\n[101-3380 m²]", "Medium\n3380-6660 m²]", "Large\n[6660-9940 m²]")) +
+  scale_y_continuous(breaks = 1:3, labels = c("Low\n[2-15]", "Medium\n[16-29]", "High\n[30-43]")) +
+  labs(x = "Group Area", y = "Group Size") +
+  coord_equal() +
+  theme(
+    axis.title = element_text(size = 10, family = "Source Sans 3", color = "#F2F2DE", face="bold"),
+    axis.title = element_text(hjust=0.5),
+    axis.text  = element_text(size = 8, family = "Source Sans 3", color = "#F2F2DE"),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.grid = element_blank(),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA)
+  )
+
+# combine map and legend
+combined_plot <- ggdraw() +
+  draw_plot(p_map, x = 0, y = 0, width = 1, height = 1) +
+  draw_plot(legend_plot, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
+
+
+combined_plot
+
+showtext_opts(dpi = 600)
+
+ggsave("cairo_connected_buildings.png", combined_plot , width = 24, height = 18, units = "cm", dpi = 600)
+
+######## Same map but more classes #############################################
+#remotes::install_github("nowosad/colorblindcheck")
+library(colorblindcheck)
+library(cowplot)
+library(biscale)
+
+library(pals)
+bivcol = function(pal){
+  tit = substitute(pal)
+  pal = pal()
+  ncol = length(pal)
+  image(matrix(seq_along(pal), nrow = sqrt(ncol)),
+        axes = FALSE, 
+        col = pal, 
+        asp = 1)
+  mtext(tit)
+}
+bivcol(stevens.bluered)
+pal_fun <- biscale::bi_pal(pal = "PurpleOr", dim = 4, flip_axes = T, rotate_pal = F)
+colors_vector <- pal_fun()
+print(colors_vector)
+
+#no solo buildings
+grouped_data <- merged_data %>%
+  filter(group_id != 0)
+
+#classify data in three groups with same range
+classify_minmax_4 <- function(x, n = 4) {
+  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
+  cut(x, breaks = breaks, include.lowest = TRUE, labels = FALSE)
+}
+
+
+non_solo_buildings_4 <- grouped_data %>%
+  mutate(
+    area_class = classify_minmax(group_area_adjusted),
+    count_class = classify_minmax(group_count),
+    group_matrix = paste0(area_class, "-", count_class)
+  )
+
+# Checking classes
+print_class_breaks_4 <- function(x, n = 4, varname = "") {
+  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
+  cat(paste0("Breaks for ", varname, ":\n"))
+  print(breaks)
+  invisible(breaks)
+}
+
+print_class_breaks_4(non_solo_buildings$group_area_adjusted, n = 4, varname = "group_area_adjusted")
+print_class_breaks_4(non_solo_buildings$group_count, n = 4, varname = "group_count")
+
+#own category for solo buildings
+solo_buildings <- solo_buildings %>%
+  mutate(group_matrix = "solo")
+
+#combine
+merged_data_classified <- bind_rows(non_solo_buildings, solo_buildings)
+
+# colors
+bi_colors_4 <- c(
+  "1-1" = "#e9e9e9ff", "2-1" = "#A89DB9", "3-1" = "#7E6A9F", "4-1"="#563787",
+  "1-2" = "#D3AF95", "2-2" = "#A88283", "3-2" = "#7E5771", "4-2"="#562D5F",
+  "1-3" = "#D28753", "2-3" = "#A86448", "3-3" = "#7E433E", "4-3"="#552335",
+  "1-4" = "#D25601", "2-4" = "#A84001", "3-4" = "#7E2B01", "4-4"="#551601",
+  "solo" = "red"
+)
+bi_colors_4 <- c(
+"1-1" ="#D9D9D9",
+"2-1"= "#D3BBA5",
+"3-1" ="#C38D6E",
+"4-1" ="#BF6015",
+"1-2" ="#B7A6C2",
+"2-2" ="#B0919D",
+"3-2" ="#A15E57",
+"4-2" ="#9A3B10",
+"1-3" ="#9272B2",
+"2-3" ="#8A5D8D",
+"3-3" ="#7B2C47",
+"4-3" ="#741000",
+"1-4" ="#6C63AC",
+"2-4" ="#654E87",
+"3-4" ="#561C41",
+"4-4" ="#4F0000",
+"solo" = "red"
+)
+
+
+bi_colors <- c(
+  "1-1" = "#D3D3D3", "2-1" = "#e9dda9ff", "3-1" = "#e8ac00ff",
+  "1-2" = "#adcbd5ff", "2-2" = "#acaaadff", "3-2" = "#a96100ff",
+  "1-3" = "#4c97b6ff", "2-3" = "#336081ff", "3-3" = "#000000",
+  "solo" = "red"
+)
+#map
+
+p_map_4 <- ggplot() +
+  geom_sf(data = merged_data_classified, aes(fill = group_matrix), color = NA) +
+  scale_fill_manual(values = bi_colors_4, name = "Group Composition") +
+  theme_minimal() +
+  coord_sf() +
+  labs(title = "Building Connectivity and Area",
+       subtitle = "Group size vs. Group area (excluding solo buildings)") +
+  theme(
+    plot.margin = margin(5, 5, 5, 5),
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color = "#F2F2DE", size = 25, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 16),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank()
+  )
+p_map
+
+#matrix legend
+legend_df_4 <- expand.grid(
+  area_class = 1:4,
+  count_class = 1:4
+) %>%
+  mutate(
+    group_matrix = paste0(area_class, "-", count_class),
+    fill = bi_colors_4[group_matrix]
+  )
+
+
+
+legend_plot_4 <- ggplot(legend_df_4, aes(x = area_class, y = count_class, fill = fill)) +
+  geom_tile() +
+  scale_fill_identity() +
+  scale_x_continuous(breaks = 1:4, labels = c("Small\n[101-3380 m²]", "Medium\n3380-6660 m²]", "Large\n[6660-9940 m²]", "....")) +
+  scale_y_continuous(breaks = 1:4, labels = c("Low\n[2-15]", "Medium\n[16-29]", "High\n[30-43]", "...")) +
+  labs(x = "Group Area", y = "Group Size") +
+  coord_equal() +
+  theme(
+    axis.title = element_text(size = 10, family = "Source Sans 3", color = "#F2F2DE", face="bold", hjust = 0.5),
+    axis.text  = element_text(size = 8, family = "Source Sans 3", color = "#F2F2DE"),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.grid = element_blank(),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA)
+  )
+
+# combine map and legend
+combined_plot_4 <- ggdraw() +
+  draw_plot(p_map_4, x = 0, y = 0, width = 1, height = 1) +
+  draw_plot(legend_plot_4, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
+
+
+combined_plot_4
+
+showtext_opts(dpi = 600)
+
+ggsave("cairo_connected_buildings_4.png", combined_plot_4 , width = 24, height = 18, units = "cm", dpi = 600)
+
+################################################################################
 #---- Map: Nieghbours Edge -----------------------------------------------------
 bbox <- st_bbox(merged_data_edge)
 buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
 
 merged_data_edge$fill_group <- ifelse(
   merged_data_edge$inside_border == 0,
-  "outside",
+  "Buildings excluded from analysis",
   as.character(merged_data_edge$neighbour_50m_filtered)
 )
 
-levels_sorted <- sort(as.numeric(unique(merged_data_edge$fill_group[merged_data_edge$fill_group != "outside"])))
-levels_sorted <- c(as.character(levels_sorted), "outside")
+levels_sorted <- sort(as.numeric(unique(merged_data_edge$fill_group[merged_data_edge$fill_group != "Buildings excluded from analysis"])))
+levels_sorted <- c(as.character(levels_sorted), "Buildings excluded from analysis")
 merged_data_edge$fill_group <- factor(merged_data_edge$fill_group, levels = levels_sorted)
 
 viridis_colors <- viridis::viridis(length(levels(merged_data_edge$fill_group)) - 1, option = "H")
-fill_colors <- c("outside" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "outside"]))
+fill_colors <- c("Buildings excluded from analysis" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "Buildings excluded from analysis"]))
 
+#---------------
 map_neighbours_edge <- ggplot() +
   geom_sf(
     data = merged_data_edge,
@@ -393,13 +799,13 @@ map_neighbours_edge <- ggplot() +
   ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Number of building density within a radius of 50 metres"
-  )+
+    subtitle = "Number of buildings within a radius of 50 metres"
+  ) +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
-    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.title = element_text(color = "#F2F2DE", size = 100, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 70),
     plot.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.grid.major = element_blank(),
@@ -407,10 +813,12 @@ map_neighbours_edge <- ggplot() +
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     axis.title = element_blank(),
-    # more space for barplot
-    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+    
   )
+
+
 map_neighbours_edge
+
 #---- Barplot: Nieghbours Edge -------------------------------------------------
 
 # Excluding Buildings where inside_border == 0
@@ -435,7 +843,7 @@ bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filter
     linewidth = 0.3
   ) +
   theme(
-    legend.position = "none",
+    legend.position = "bottom",
     text = element_text(family = "Source Sans 3"),
     axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold", colour = "#F2F2DE"),
     axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 40, face = "bold"),
@@ -453,11 +861,13 @@ bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filter
   )
 
 bar_neighbours_edge
+
 #---- Combine ------------------------------------------------------------------
+
 combined_neighbour_edge <- map_neighbours_edge +
   inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
 
-ggsave("neighbours_edge.png", combined_neighbour_edge, width = 30, height = 18, units = "cm", dpi = 600)
+ggsave("cairo_neighbours_buffer50_without_edge.png", combined_neighbour_edge , width = 30, height = 18, units = "cm", dpi = 600)
 
 
 #---- calculating the orientation of each building -----------------------------
@@ -949,26 +1359,6 @@ ggsave("test_2_estimated_neighbours.png", combined_map_bar_2, width = 30, height
 ################################################################################
 #### Individual Building Area ##################################################
 ################################################################################
-
-# individual Building area
-merged_data$building_area <- round(as.numeric(st_area(merged_data)))
-
-# classify
-merged_data$building_area_class <- floor(merged_data$building_area / 50) 
-
-# How many Buildings per class?
-c <- merged_data %>%
-  count(building_area_class)
-
-# # classify
-# breaks <- seq(0, 4488 , by = 100)
-# 
-# ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
-#   geom_bar() +
-#   scale_fill_viridis_d(option = "H")+
-#   facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")))+
-#   theme(
-#     legend.position = "none")
 
 
 ggplot() +
