@@ -62,16 +62,16 @@ merged_data$poly_id <- seq_len(nrow(merged_data))
 #---- Number of buildings in the buffer zone of each building ------------------
 
 # Calculating the centroid for every building
-centroid <- st_centroid(merged_data)
-plot(centroid[4], pch=20)
+centroid_1 <- st_centroid(merged_data)
+plot(centroid_1[4], pch=20)
 
 # 50m buffer
-buffer_50m <- st_buffer(centroid, dist = 50)
+buffer_50m <- st_buffer(centroid_1, dist = 50)
 
 buffer_area_50m <- pi * 50^2
 
 # Counting the number of centroids within the buffer for each point
-count_neighbour_50 <- st_intersects(buffer_50m, centroid)
+count_neighbour_50 <- st_intersects(buffer_50m, centroid_1)
 
 # Checking that buildings are not mixed up
 count_neighbour_50[[5]]
@@ -111,10 +111,31 @@ border <- concaveman(corner)
 
 plot(border)
 
+#---- Border for both areas ----------------------------------------------------
+
+merged_type1 <- merged_data[merged_data$type == 1, ]
+merged_type2 <- merged_data[merged_data$type == 2, ]
+
+#Edges of Buildings
+coords_type1 <- st_coordinates(merged_type1) %>%
+  as.data.frame() %>%
+  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
+
+coords_type2 <- st_coordinates(merged_type2) %>%
+  as.data.frame() %>%
+  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
+
+# surrounding
+border_type1 <- concaveman(coords_type1)
+border_type2 <- concaveman(coords_type2)
+
+border_2 <- rbind(border_type1, border_type2)
+plot(border_2)
+
 # ---- Filtering buffers -------------------------------------------------------
 
 #TODO: Noch zu viele variablen, teilweise doppelt und durcheinander, muss aufräumen
-
+centroid <- centroid_1
 # Empty columns
 centroid$neighbour_50m_filtered <- NA
 centroid$neighbour_50m_outside_estimate <- NA
@@ -246,6 +267,199 @@ ggplot(merged_data, aes(x = factor(building_density_total_rounded))) +
   geom_bar(fill = viridisLite::viridis(1, option = "plasma")) +
   scale_x_discrete(breaks = seq(0, 1, by = 0.1))
 
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#Same Loop but only buildings whose buffer is at least 95% within the border are used.
+
+centroid_edge <- centroid_1
+
+centroid_edge$neighbour_50m_filtered <- NA
+centroid_edge$neighbour_50m_outside_estimate <- NA
+centroid_edge$building_area_full <- NA
+centroid_edge$building_area_outside_estimate <- NA
+centroid_edge$building_area_intersect <- NA
+centroid_edge$buffer_area_inside <- NA
+centroid_edge$buffer_area_outside <- NA
+centroid_edge$area_density_inside <- NA
+centroid_edge$area_outside_estimate <- NA
+centroid_edge$building_area_estimated_total <- NA
+centroid_edge$avg_neighbour_area <- NA
+centroid_edge$distance_sd_neighbours <- NA
+centroid_edge$inside_border <- NA
+
+for (i in seq_len(nrow(buffer_50m))) {
+  
+  buffer_i <- buffer_50m[i, ]
+  neighbour_ids <- count_neighbour_50[[i]]
+  buildings_all_50 <- merged_data[neighbour_ids, ]
+  
+  if (nrow(buildings_all_50) == 0) next
+  
+  # Buffer coverage check
+  buffer_total_area <- st_area(buffer_i)
+  buffer_inside_border <- st_area(st_intersection(buffer_i, border_2))
+  
+  share_inside <- as.numeric(buffer_inside_border) / as.numeric(buffer_total_area)
+  centroid_edge$inside_border[i] <- ifelse(share_inside >= 0.95, 1, 0)
+  
+  if (share_inside < 0.95) next
+  
+  building_area <- st_area(buildings_all_50)
+  building_intersect <- st_intersection(buildings_all_50, buffer_i)
+  area_intersect <- st_area(building_intersect)
+  
+  centroid_edge$building_area_intersect[i] <- sum(as.numeric(area_intersect))
+  centroid_edge$building_area_full[i] <- sum(as.numeric(area_intersect))
+  
+  building_area_intersect_percentage <- as.numeric((area_intersect / building_area) * 100)
+  
+  neighbours_filtered <- neighbour_ids[building_area_intersect_percentage >= 50]
+  neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
+  centroid_edge$neighbour_50m_filtered[i] <- length(neighbours_filtered)
+  
+  centroid_edge$buffer_area_inside[i] <- as.numeric(buffer_inside_border)
+  buffer_outside_border <- max(0, as.numeric(buffer_total_area - buffer_inside_border))
+  centroid_edge$buffer_area_outside[i] <- buffer_outside_border
+  
+  if (as.numeric(buffer_inside_border) > 0) {
+    neighbour_density <- centroid_edge$neighbour_50m_filtered[i] / as.numeric(buffer_inside_border)
+    centroid_edge$neighbour_50m_outside_estimate[i] <- neighbour_density * buffer_outside_border
+    area_density_inside <- centroid_edge$building_area_full[i] / as.numeric(buffer_inside_border)
+    centroid_edge$area_density_inside[i] <- area_density_inside
+    centroid_edge$area_outside_estimate[i] <- area_density_inside * buffer_outside_border
+    centroid_edge$building_area_estimated_total[i] <- centroid_edge$building_area_full[i] + centroid_edge$area_outside_estimate[i]
+  } else {
+    centroid_edge$neighbour_50m_outside_estimate[i] <- NA
+    centroid_edge$building_area_outside_estimate[i] <- NA
+  }
+  
+  if (length(neighbours_filtered) > 0) {
+    filtered_buildings <- merged_data[neighbours_filtered, ]
+    avg_area <- mean(as.numeric(st_area(filtered_buildings)))
+    centroid_edge$avg_neighbour_area[i] <- avg_area
+  } else {
+    centroid_edge$avg_neighbour_area[i] <- NA
+  }
+  
+  neighbour_ids <- neighbour_ids[neighbour_ids != i]
+  if (length(neighbour_ids) >= 3) {
+    center_i <- st_coordinates(centroid[i, ])
+    neighbour_coords <- st_coordinates(centroid[neighbour_ids, ])
+    dists <- sqrt((neighbour_coords[,1] - center_i[1])^2 + (neighbour_coords[,2] - center_i[2])^2)
+    centroid_edge$distance_sd_neighbours[i] <- sd(dists)
+  } else {
+    centroid_edge$distance_sd_neighbours[i] <- NA
+  }
+}
+
+# Join results to merged_data_edge
+merged_data_edge <- merged_data %>%
+  left_join(
+    centroid_edge %>%
+      st_drop_geometry() %>%
+      select(poly_id, neighbour_50m_filtered, area_density_inside, avg_neighbour_area, distance_sd_neighbours, inside_border),
+    by = "poly_id"
+  )
+
+#---- Map: Nieghbours Edge -----------------------------------------------------
+bbox <- st_bbox(merged_data_edge)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+merged_data_edge$fill_group <- ifelse(
+  merged_data_edge$inside_border == 0,
+  "outside",
+  as.character(merged_data_edge$neighbour_50m_filtered)
+)
+
+levels_sorted <- sort(as.numeric(unique(merged_data_edge$fill_group[merged_data_edge$fill_group != "outside"])))
+levels_sorted <- c(as.character(levels_sorted), "outside")
+merged_data_edge$fill_group <- factor(merged_data_edge$fill_group, levels = levels_sorted)
+
+viridis_colors <- viridis::viridis(length(levels(merged_data_edge$fill_group)) - 1, option = "H")
+fill_colors <- c("outside" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "outside"]))
+
+map_neighbours_edge <- ggplot() +
+  geom_sf(
+    data = merged_data_edge,
+    aes(fill = fill_group),
+    color = NA
+  ) +
+  scale_fill_manual(
+    values = fill_colors,
+    name = "Number of neighbours"
+  ) +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE
+  ) +
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Number of building density within a radius of 50 metres"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_neighbours_edge
+#---- Barplot: Nieghbours Edge -------------------------------------------------
+
+# Excluding Buildings where inside_border == 0
+filtered_data <- merged_data_edge %>% 
+  filter(inside_border == 1)
+
+bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Number of individual neighbours within a radius of 50 metres",
+    y = "Count",
+    fill = "Neighbours"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  scale_x_discrete(breaks = as.character(seq(0, 54, 5))) +
+  scale_y_continuous(breaks = seq(0, 500, 100)) +
+  geom_hline(
+    yintercept = seq(0, 500, 100),
+    color = "#F2F2DE",
+    linetype = "dotted",
+    linewidth = 0.3
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold", colour = "#F2F2DE"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 40, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 50),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 50),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 60),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_neighbours_edge
+#---- Combine ------------------------------------------------------------------
+combined_neighbour_edge <- map_neighbours_edge +
+  inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+
+ggsave("neighbours_edge.png", combined_neighbour_edge, width = 30, height = 18, units = "cm", dpi = 600)
+
+
 #---- calculating the orientation of each building -----------------------------
 # get_orientation <- function(polygon) {
 #   lines <- st_cast(polygon, "LINESTRING")
@@ -282,7 +496,7 @@ ggplot(merged_data, aes(x = factor(building_density_total_rounded))) +
 # 
 # merged_data_poly$orientation_direction <- sapply(merged_data_poly$orientation_angle, angle_to_direction)
 
-#----different ------------------
+#----Orientatidifferent ------------------
 get_orientation <- function(polygon) {
   lines <- st_cast(polygon, "LINESTRING")
   coords <- st_coordinates(lines)[, 1:2]
@@ -407,6 +621,47 @@ map_sd_different <- ggplot() +
     plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
   )
 map_sd_different
+
+bar_orientation <- ggplot(merged_data, aes(x = factor(orientation_axis), fill = factor(orientation_axis))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Orientation Axis",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  # scale_x_discrete(breaks=as.character(seq(0,54,5)))+
+  # scale_y_continuous(breaks = seq(0, 500, 100))+
+  # geom_hline(
+  #   yintercept = seq(0, 500, 100),
+  #   color = "#F2F2DE",
+  #   linetype = "dotted",
+  #   linewidth = 0.3 
+  #)+
+  theme(
+    legend.position = "none"#,
+    # text = element_text(family = "Source Sans 3"),
+    # axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+    #                            colour = "#F2F2DE",
+    #                            family = "Source Sans 3"),
+    # axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    # axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    # axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    # panel.background = element_rect(fill = NA, color = NA),
+    # plot.background = element_rect(fill = NA, color = NA),
+    # panel.grid.major = element_blank(),
+    # panel.grid.minor = element_blank(),
+    # axis.ticks.y = element_blank(),
+    # axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
+    # # Changing header with strip.
+    # strip.background = element_blank(),
+    # strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    # panel.spacing = unit(0.7, "cm")
+  )
+
+bar_orientation
+
  #### Standard Deviation distance 50m ##########################################
 #---- Map ----------------------------------------------------------------------
 bbox <- st_bbox(merged_data)
