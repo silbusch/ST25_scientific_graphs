@@ -1,6 +1,3 @@
-# ----usefuul for me ----
-# in Terminal (Tools --> Terminal)
-# git grep -n TODO
 #*******************************************************************************
 #**** PACKAGES *****************************************************************
 #*******************************************************************************
@@ -27,17 +24,18 @@ showtext_auto()
 #**** LOADING DATA *************************************************************
 #*******************************************************************************
 
-# TODO: New path
-
 setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
 
 unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_unstructured.gpkg")
 
 structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
 
-plots <- ("enter here path for exporting plots")
-#mine
-#plots <- ...
+#setwd("Set the path where the graphics should be saved")
+
+#unstructured <-st_read("C:/set your path/NewCairo_unstructured.gpkg")
+
+#structured <-st_read("C:/set your path/NewCairo_structured.gpkg")
+
 #*******************************************************************************
 #**** PREPARE DATA *************************************************************
 #*******************************************************************************
@@ -46,6 +44,7 @@ unstructured$type <- 1
 structured$type <- 2
 
 merged_data <- rbind(unstructured, structured)
+
 #Setting ID for every Polygon
 merged_data$poly_id <- seq_len(nrow(merged_data))
 
@@ -155,11 +154,11 @@ for (i in seq_len(nrow(buffer_50m))) {
   }
     #Standard deviation of neighbour distances with at least three neighbours
   if (length(filtered_ids) >= 3) {
-    #coordinated current building[i]
+    #Coordinated current building[i]
     center <- st_coordinates(centroid_edge[i, ])
     #coordinated filtered neighbours of current building[i]
     neighbours_coords <- st_coordinates(centroid_edge[filtered_ids, ])
-    #calculating euclidean distance between current building and his filtered neighbours
+    # Calculating euclidean distance between current building and his filtered neighbours
     dists <- sqrt((neighbours_coords[, 1] - center[1])^2 +
                     (neighbours_coords[, 2] - center[2])^2)
     #Standard deviation of distance
@@ -176,7 +175,7 @@ merged_data_edge <- merged_data %>%
     by = "poly_id"
   )
 
-#---- area--------
+#---- area----------------------------------------------------------------------
 #Individual Building area
 merged_data_edge$building_area_individual <- st_area(merged_data_edge)
 merged_data_edge$building_area_individual <- as.numeric(st_area(merged_data_edge))
@@ -205,8 +204,8 @@ merged_data_clean <- merged_data_edge %>%
 
 merged_data_clean$building_area_density_index <- round(as.numeric((merged_data_clean$building_area_individual / merged_data_clean$building_area_intersect.x)),2)
 
-#---- Building dominanz ----------------------------------------------
-#Mixing relative area with neighbour density
+#---- Building dominanz --------------------------------------------------------
+# Mixing relative area with neighbour density
 
 # A high value means that a big Buildings is in a high density environment
 # mean value means that the a big building is in a loose neighbourhood or a small building in a high density neighbourhood
@@ -216,8 +215,21 @@ merged_data_clean$neighbour_building_dominanz <-
   round(((merged_data_clean$building_area_individual /merged_data_clean$building_area_intersect.x) *merged_data_clean$neighbour_50m_filtered),2)
 
 #....Surrounding index---dont know...-------------------------------------------
-# dont knowif this could be intresting
+# dont know if this could be intresting
 merged_data_clean$surrounding_index <-  round(as.numeric(((merged_data_clean$building_area_individual/merged_data_clean$building_area_intersect.x)* (1*((buffer_total_area -merged_data_clean$building_area_intersect.x)/buffer_total_area)))),2)
+
+#---- How unusual is the building size in its surroundings? -------------------------
+
+merged_data_clean$special_size_index <- merged_data_clean$building_area_individual / merged_data_clean$avg_neighbour_area
+
+merged_data_clean <- merged_data_clean %>%
+  filter(!is.na(special_size_index))
+
+#z_standardisation
+merged_data_clean$special_size_index_z <- scale(merged_data_clean$special_size_index)
+
+summary(merged_data_clean$special_size_index_z)
+
 
 #---- JOIN ---------------------------------------------------------------------
 
@@ -327,8 +339,8 @@ map_neighbours_edge <- ggplot() +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 100, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 70),
+    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 14),
     plot.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.grid.major = element_blank(),
@@ -338,8 +350,6 @@ map_neighbours_edge <- ggplot() +
     axis.title = element_blank(),
     
   )
-
-#map_neighbours_edge
 
 #---- Barplot ------------------------------------------------------------------
 
@@ -367,10 +377,10 @@ bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filter
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold", colour = "#F2F2DE"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 40, face = "bold"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 50),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 50),
+    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 10, face = "bold", colour = "#F2F2DE"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 10),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     panel.grid.major = element_blank(),
@@ -378,7 +388,7 @@ bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filter
     axis.ticks.y = element_blank(),
     axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
     strip.background = element_blank(),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 60),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
     panel.spacing = unit(0.7, "cm")
   )
 
@@ -572,7 +582,7 @@ patches_map_q <- ggplot() +
 
 patches_map_q
 
-#---- MAtrix plot --------------------------------------------------------------
+#---- Matrix plot --------------------------------------------------------------
 matrix_plot_q <- expand.grid(
   area_class_q = 1:3,
   count_class_q = 1:3
@@ -611,12 +621,102 @@ showtext_opts(dpi = 600)
 ggsave("cairo_patches_quantiles.png", patches_plot_q, width = 24, height = 18, units = "cm", dpi = 600)
 
 ################################################################################
-#**** Building density *********************************************************
+#**** AVG NEIGHBOUR AREA *******************************************************
+################################################################################
+
+#---- Map ----------------------------------------------------------------------
+
+map_neighbours_area <- ggplot() +
+  geom_sf(
+    data = merged_data_edge,aes(fill = avg_neighbour_area),  color = NA) +
+  scale_fill_viridis_c(
+    option = "H",
+    name = "Average\nNeighbour Area (m²)",
+    na.value = "#444444"
+  ) +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE
+  ) +
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Average building size within a 50 m radius of a building"
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 14),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    
+  )
+
+map_neighbours_area
+
+#---- Barplot ------------------------------------------------------------------
+
+# Excluding Buildings where inside_border == 0
+filtered_data <- merged_data_edge %>% 
+  filter(include_in_analysis == 1)
+
+bar_neighbours_area <- ggplot(filtered_data, aes(x = factor(avg_neighbour_area), fill = factor(avg_neighbour_area))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Average building size",
+    y = "Count",
+    fill = "Neighbours"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  scale_x_discrete(breaks = as.character(seq(0, 54, 5))) +
+  scale_y_continuous(breaks = seq(0, 500, 100)) +
+  geom_hline(
+    yintercept = seq(0, 500, 100),
+    color = "#F2F2DE",
+    linetype = "dotted",
+    linewidth = 0.3
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 10, face = "bold", colour = "#F2F2DE"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 10),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_neighbours_area
+
+#---- Combine ------------------------------------------------------------------
+
+combined_neighbour_area <- map_neighbours_area +
+  inset_element(bar_neighbours_area, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+
+ggsave("cairo_avg_building_area.png", combined_neighbour_area , width = 15, height = 18, units = "cm", dpi = 600)
+
+
+################################################################################
+#**** Density_dominance ********************************************************
 ################################################################################
 
 #---- MAP ----------------------------------------------------------------------
 
-map_density <- ggplot() +
+map_dominance <- ggplot() +
   geom_sf(
     data = merged_data_edge, aes(fill = building_area_density_index), color = NA
   ) +
@@ -644,7 +744,7 @@ map_density <- ggplot() +
     
   )
 
-map_density
+map_dominance
 
 #---- Barplot ------------------------------------------------------------------
 
@@ -652,12 +752,12 @@ map_density
 filtered_data <- merged_data_edge %>% 
   filter(include_in_analysis == 1)
 
-bar_density <- ggplot(merged_data_edge, aes(x = factor(building_area_density_index),  fill = factor(building_area_density_index))) +
+bar_dominance <- ggplot(merged_data_edge, aes(x = factor(building_area_density_index),  fill = factor(building_area_density_index))) +
   geom_bar() +
   scale_fill_viridis_d(option = "H") +
   scale_x_discrete(breaks = seq(0,1, 0.1)) +
   labs(
-    x = "Building area density",
+    x = "Building dominance index",
     y = "Count",
   ) +
   facet_wrap(
@@ -678,19 +778,130 @@ bar_density <- ggplot(merged_data_edge, aes(x = factor(building_area_density_ind
     strip.background = element_blank(),
     strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
     panel.grid.major.y = element_line(color = "#F2F2DE", linetype = "dotted", linewidth = 0.3)
-        )
-  
+  )
 
-bar_density
+
+bar_dominance
 
 #---- Combine ------------------------------------------------------------------
 
-combined_density <- map_density +
+combined_dominance <- map_density +
   inset_element(bar_density, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
 
-ggsave("test_density.png", combined_density , width = 15, height = 18, units = "cm", dpi = 600)
+ggsave("cairo_building_area_dominance.png", combined_dominance , width = 15, height = 18, units = "cm", dpi = 600)
+
+
+
+
+
+
+
+
+
+
+
+#*******************************************************************************
+################################################################################
+#** STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP STOP*
+################################################################################
+#** Unfinished code # Unfinished code # Unfinished code # Unfinished code     **
+################################################################################
+
+
+
+
+
+
+
 
 ################################################################################
+#**** Regularity of the distribution of neighbors ******************************
+################################################################################
+
+#----- MAP ---------------------------------------------------------------------
+bbox <- st_bbox(merged_data_edge)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
+
+map_sd <- ggplot() +
+  geom_sf(data = merged_data_edge, aes(fill = factor(distance_sd_neighbours)), color = NA) +
+  scale_fill_viridis_d(option = "H") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE)+
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Variation in distances to neighbors (within 50m) used as a proxy for spatial order"
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
+    plot.subtitle = element_text(color="#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    # more space for barplot
+    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
+  )
+map_sd
+
+#---- barplot ---------------------------------------------------------
+
+bar_sd <- ggplot(merged_data_edge, aes(x = factor(distance_sd_neighbours), fill = factor(distance_sd_neighbours))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Building proximity variation",
+    y = "Count",
+    fill = "Type"
+  ) +
+  facet_wrap(
+    ~ type,
+    labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")),
+    scales = "free_y"
+  )+
+  scale_x_discrete(breaks=as.character(seq(0,18,1)))+
+  scale_y_continuous(breaks = seq(0, 3000, 500))+
+  geom_hline(
+    yintercept = seq(0, 3000, 500),
+    color = "#F2F2DE",
+    linetype = "dotted",
+    linewidth = 0.3
+  )+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    #axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
+    #                           colour = "#F2F2DE",
+    #                           family = "Source Sans 3"),
+    #axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
+    #axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
+    #axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_sd
+#---- Combine ------------------------------------------------------------------
+
+plot_sd <- map_sd +
+  inset_element(bar_sd, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+
+ggsave("cairo_regularity_of_neighbours_distribution.png", plot_sd , width = 15, height = 18, units = "cm", dpi = 600)
+
+
+
 #**** Individual Building Area *************************************************
 ################################################################################
 
@@ -826,91 +1037,3 @@ combined_map_area
 
 
 ggsave("cairo_building_area.png", combined_map_area, width = 15, height = 18, units = "cm", dpi = 600)
-
-
-################################################################################
-#**** Regularity of the distribution of neighbors ******************************
-################################################################################
-
-#----- MAP ---------------------------------------------------------------------
-bbox <- st_bbox(merged_data_edge)
-buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
-
-map_sd <- ggplot() +
-  geom_sf(data = merged_data_edge, aes(fill = factor(distance_sd_neighbours)), color = NA) +
-  scale_fill_viridis_d(option = "H") +
-  coord_sf(
-    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
-    expand = FALSE)+
-  labs(
-    title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Variation in distances to neighbors (within 50m) used as a proxy for spatial order"
-  )+
-  theme(
-    legend.position = "none",
-    text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color="#F2F2DE", size = 100, face= "bold"),
-    plot.subtitle = element_text(color="#F2F2DE", size = 70),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    # more space for barplot
-    plot.margin = margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),
-  )
-map_sd
-
-#---- barplot ---------------------------------------------------------
-
-bar_sd <- ggplot(merged_data_edge, aes(x = factor(distance_sd_neighbours), fill = factor(distance_sd_neighbours))) +
-  geom_bar() +
-  scale_fill_viridis_d(option = "H") +
-  labs(
-    x = "Building proximity variation",
-    y = "Count",
-    fill = "Type"
-  ) +
-  facet_wrap(
-    ~ type,
-    labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")),
-    scales = "free_y"
-  )+
-  scale_x_discrete(breaks=as.character(seq(0,18,1)))+
-  scale_y_continuous(breaks = seq(0, 3000, 500))+
-  geom_hline(
-    yintercept = seq(0, 3000, 500),
-    color = "#F2F2DE",
-    linetype = "dotted",
-    linewidth = 0.3
-  )+
-  theme(
-    legend.position = "none",
-    text = element_text(family = "Source Sans 3"),
-    #axis.text.x = element_text(margin= margin(t=0, unit="pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold",
-    #                           colour = "#F2F2DE",
-    #                           family = "Source Sans 3"),
-    #axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 40, face = "bold"),
-    #axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size= 50),
-    #axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size= 50),
-    panel.background = element_rect(fill = NA, color = NA),
-    plot.background = element_rect(fill = NA, color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.ticks.y = element_blank(),
-    axis.ticks = element_line(color = "#F2F2DE", linewidth =0.3),
-    strip.background = element_blank(),
-    strip.text = element_text(hjust=0, face="bold", color="#F2F2DE", family="Source Sans 3", size=60),
-    panel.spacing = unit(0.7, "cm")
-  )
-
-bar_sd
-#---- Combine ------------------------------------------------------------------
-
-plot_sd <- map_sd +
-  inset_element(bar_sd, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
-
-ggsave("cairo_regularity_of_neighbours_distribution.png", plot_sd , width = 15, height = 18, units = "cm", dpi = 600)
-
