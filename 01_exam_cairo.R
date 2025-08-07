@@ -1,8 +1,9 @@
 # ----usefuul for me ----
 # in Terminal (Tools --> Terminal)
 # git grep -n TODO
-
-# Packages
+#*******************************************************************************
+#**** PACKAGES *****************************************************************
+#*******************************************************************************
 library(sf)
 library(terra)
 library(landscapemetrics)
@@ -11,14 +12,20 @@ library(tidyr)
 library(ggplot2)
 library(patchwork)
 library(concaveman)
+library(igraph)
 
 library(sysfonts)
 library(showtextdb)
 library(showtext)
+
+# Loading Font for Graphs
 font_add_google("Source Sans 3", "Source Sans 3")
 showtext_auto()
 
-# ---- Load Data (Old Path) ----
+#*******************************************************************************
+#**** LOADING DATA *************************************************************
+#*******************************************************************************
+
 # TODO: New path
 
 setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
@@ -27,6 +34,9 @@ unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scien
 
 structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
 
+#*******************************************************************************
+#**** PREPARE DATA *************************************************************
+#*******************************************************************************
 # Merge Datasets
 unstructured$type <- 1
 structured$type <- 2
@@ -35,47 +45,24 @@ merged_data <- rbind(unstructured, structured)
 #Setting ID for every Polygon
 merged_data$poly_id <- seq_len(nrow(merged_data))
 
-#
-# merged_data_long <- merged_data %>% st_drop_geometry() %>%
-#pivot_longer(cols = -c(type, poly_id), names_to="metric", values_to = "value")
+#Check if metric coordinate system
+st_crs(merged_data)
 
-################################################################################
-
-# ggplot()+
-#   geom_sf(data=merged_data)
-# 
-# 
-# ######################
-# # rasterisation with cell size of 5m
-# raster <- rast(ext(merged_data), resolution = 5)
-# 
-# # raster with type-values
-# r_type <- rasterize(merged_data, raster, field = "type")
-# 
-# # raster with ID-values
-# r_polyid <- rasterize(merged_data, raster, field = "poly_id")
-# 
-# plot(r_polyid)
-# plot(r_type)
-################################################################################
-################################################################################
-#### CLACLULATION PART##########################################################
-################################################################################
-################################################################################
+#*******************************************************************************
+#**** NEIGHBOURS IN 50m BUFFER *************************************************
+#*******************************************************************************
 #---- Number of buildings in the buffer zone of each building ------------------
 
 # Calculating the centroid for every building
-centroid_1 <- st_centroid(merged_data)
-plot(centroid_1[4], pch=20)
+centroid <- st_centroid(merged_data)
 
 # 50m buffer
-buffer_50m <- st_buffer(centroid_1, dist = 50)
-
+buffer_50m <- st_buffer(centroid, dist = 50)
 # Area of Buffer
 buffer_area_50m <- pi * 50^2
 
 # Counting the number of centroids within the buffer for each point
-count_neighbour_50 <- st_intersects(buffer_50m, centroid_1)
+count_neighbour_50 <- st_intersects(buffer_50m, centroid)
 
 # Checking that buildings are not mixed up
 count_neighbour_50[[5]]
@@ -84,211 +71,42 @@ merged_data$poly_id[count_neighbour_50[[5]]]
 # Adding new column ("-1" to not include the respective point itself)
 centroid$neighbour_50m <- lengths(count_neighbour_50) - 1
 
-
-
-# # Map 
-# plot_50m <- ggplot(centroid)+ 
-#   geom_sf(aes(color=neighbour_50m), size = 1)+
-#   scale_color_viridis_c(option = "plasma", name = "Neighbours within 50 m distance") +
-#   labs(
-#     title = "Neighbours 50 m",
-#   )
-# 
-# plot_100m <- ggplot(centroid)+ 
-#   geom_sf(aes(color=neighbour_100m), size = 1)+
-#   scale_color_viridis_c(option = "plasma", name = "Neighbours within 100 m distance") +
-#   labs(
-#     title = "Neighbours 100 m",
-#   )
-# plot_50m + plot_100m
-
-#---- Delimiting the study area ------------------------------------------------
+#*******************************************************************************
+#**** BOUNDARIES OF AOI ********************************************************
+#*******************************************************************************
 # Roads should not be considered "outside the study area"
-
 # getting EVERY corner coordinate of the buildings
-corner <- st_coordinates(merged_data) %>%
+coords_type1 <- st_coordinates(unstructured) %>%
   as.data.frame() %>%
-  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
+  st_as_sf(coords = c("X", "Y"), crs = st_crs(unstructured))
 
-# concave area around the building cluster....so I don´t have the huge area around
-border <- concaveman(corner)
-
-plot(border)
-
-#---- Border for both areas ----------------------------------------------------
-
-merged_type1 <- merged_data[merged_data$type == 1, ]
-merged_type2 <- merged_data[merged_data$type == 2, ]
-
-#Edges of Buildings
-coords_type1 <- st_coordinates(merged_type1) %>%
+coords_type2 <- st_coordinates(structured) %>%
   as.data.frame() %>%
-  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
-
-coords_type2 <- st_coordinates(merged_type2) %>%
-  as.data.frame() %>%
-  st_as_sf(coords = c("X", "Y"), crs = st_crs(merged_data))
+  st_as_sf(coords = c("X", "Y"), crs = st_crs(structured))
 
 # surrounding
 border_type1 <- concaveman(coords_type1)
 border_type2 <- concaveman(coords_type2)
 
-border_2 <- rbind(border_type1, border_type2)
+#border_2 <- rbind(border_type1, border_type2)
+border_2 <- st_union(border_type1, border_type2)
 plot(border_2)
 
-# ---- Filtering buffers -------------------------------------------------------
+#*******************************************************************************
+#**** ENVIRONMENT BASED METRICS ************************************************
+#*******************************************************************************
 
-#TODO: Noch zu viele variablen, teilweise doppelt und durcheinander, muss aufräumen
-centroid <- centroid_1
-# Empty columns
-centroid$neighbour_50m_filtered <- NA
-centroid$neighbour_50m_outside_estimate <- NA
-centroid$building_area_full <- NA
-centroid$building_area_outside_estimate <- NA
-centroid$building_area_intersect <- NA
-centroid$buffer_area_inside <- NA
-centroid$buffer_area_outside <- NA
-centroid$area_density_inside <- NA
-centroid$area_outside_estimate <- NA
-centroid$building_area_estimated_total <- NA
+centroid_edge <- centroid
 
-#TODO: Variablen besser benennen und einheitlicher
-for (i in seq_len(nrow(buffer_50m))) {
-  # BBuffer current centroid 
-  buffer_i <- buffer_50m[i, ]
-  # addint all buildings touching the buffer[i] to the list
-  neighbour_ids <- count_neighbour_50[[i]]
-  buildings_all_50 <- merged_data[neighbour_ids, ]
-  
-  # Possibly unnecessary loop, but currently too scared to remove it
-  if (nrow(buildings_all_50) == 0) next
-  
-  #Area for each building
-  building_area <- st_area(buildings_all_50)
-  # clipping buildings with buffer
-  building_intersect <- st_intersection(buildings_all_50, buffer_i)
-  #remaining area of each building after clipping
-  area_intersect <- st_area(building_intersect)
-  # adding amount of building area of each buffer to column
-  centroid$building_area_intersect[i] <- sum(as.numeric(area_intersect))
-  centroid$building_area_full[i] <- sum(as.numeric(area_intersect))
-  # percentage of the remaining area of each building
-  building_area_intersect_percentage <- as.numeric((area_intersect / building_area) * 100)
-  
-  #---- Counting Neighbours ----- 
-  # Only keeping buildings whose area is at least 50% within the buffer zone, but without the Building itself
-  neighbours_filtered <- neighbour_ids[building_area_intersect_percentage >= 50]
-  neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
-  # adding amount of neighbours to column
-  centroid$neighbour_50m_filtered[i] <- length(neighbours_filtered)
-  
-  #---- Lalalala ----
-  # total buffer area (always the same)
-  # TODO: Als Variable abspeichern, anstatt imemr neu zu berechnen
-  buffer_total_area <- st_area(buffer_i)
-  # Calculating area of buffer inside border
-  buffer_inside_border <- st_area(st_intersection(buffer_i, border))
-  centroid$buffer_area_inside[i] <- as.numeric(buffer_inside_border)
-  #Calculating area of buffer outside border
-  buffer_outside_border <- max(0, as.numeric(buffer_total_area - buffer_inside_border))
-  centroid$buffer_area_outside[i] <- buffer_outside_border
-  
-  #TODO: if durch for ersetzen
-  if (as.numeric(buffer_inside_border) > 0) {
-    #---- Number of Neighbours ----
-    # Building density
-    neighbour_density <- centroid$neighbour_50m_filtered[i] / as.numeric(buffer_inside_border)
-    # Estimating density outside border
-    centroid$neighbour_50m_outside_estimate[i] <- neighbour_density * buffer_outside_border
-    
-    #---- Area Density ----
-    # Dichte der gesamten Gebäude(m²) pro m² Fläche
-    area_density_inside <- centroid$building_area_full[i] / as.numeric(buffer_inside_border)
-    centroid$area_density_inside[i] <- area_density_inside
-    
-    centroid$area_outside_estimate[i] <- area_density_inside * buffer_outside_border
-    #total estimated building area in buffer
-    centroid$building_area_estimated_total[i] <- centroid$building_area_full[i] + centroid$area_outside_estimate[i]
-    
-    
-  } else {
-    centroid$neighbour_50m_outside_estimate[i] <- NA
-    centroid$building_area_outside_estimate[i] <- NA
-  }
-  #----Standard deviation within a 50 m buffer of the distance
-  if (length(neighbours_filtered) > 0) {
-    filtered_buildings <- merged_data[neighbours_filtered, ]
-    avg_area <- mean(as.numeric(st_area(filtered_buildings)))
-    centroid$avg_neighbour_area[i] <- avg_area
-  } else {
-    centroid$avg_neighbour_area[i] <- NA
-  }
-  neighbour_ids <- count_neighbour_50[[i]]
-  neighbour_ids <- neighbour_ids[neighbour_ids != i]
-  
-  if (length(neighbour_ids) >= 3) {
-    center_i <- st_coordinates(centroid[i, ])
-    neighbour_coords <- st_coordinates(centroid[neighbour_ids, ])
-    dists <- sqrt((neighbour_coords[,1] - center_i[1])^2 + (neighbour_coords[,2] - center_i[2])^2)
-    centroid$distance_sd_neighbours[i] <- sd(dists)
-  } else {
-    centroid$distance_sd_neighbours[i] <- NA
-  }
-  }
-  
-  centroid$distance_sd_neighbours <- dist_sd
-}
+# Buffer_area
+buffer_total_area <- pi * 50^2
 
-# rounded estimated neighbours
-centroid$neighbour_50m_total_estimate <- centroid$neighbour_50m_filtered + centroid$neighbour_50m_outside_estimate
-centroid$neighbour_50m_total_estimate_rounded <- round(centroid$neighbour_50m_total_estimate)
-
-#rounded estimated building area density
-centroid$building_density_total <- centroid$building_area_estimated_total / buffer_area_50m
-centroid$building_density_total_rounded <- round(merged_data$building_density_total, 2)
-
-# left join
-merged_data <- merged_data %>%
-  left_join(
-    centroid %>%
-      st_drop_geometry() %>%
-      select(poly_id, neighbour_50m_total_estimate_rounded, building_density_total_rounded, building_density_total),
-    by = "poly_id"
-  )
-
-merged_data <- merged_data %>%
-  left_join(
-    centroid %>%
-      st_drop_geometry() %>%
-      select(poly_id, distance_sd_neighbours, neighbour_50m),
-    by = "poly_id"
-  )
-
-merged_data$distance_sd_neighbours_round <- round(as.numeric(merged_data$distance_sd_neighbours), 3)
-
-
-ggplot(merged_data, aes(x = factor(building_density_total_rounded))) +
-  geom_bar(fill = viridisLite::viridis(1, option = "plasma")) +
-  scale_x_discrete(breaks = seq(0, 1, by = 0.1))
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#Same Loop but only buildings whose buffer is at least 95% within the border are used.
-
-centroid_edge <- centroid_1
-
+# New columns
 centroid_edge$neighbour_50m_filtered <- NA
-centroid_edge$neighbour_50m_outside_estimate <- NA
-centroid_edge$building_area_full <- NA
-centroid_edge$building_area_outside_estimate <- NA
 centroid_edge$building_area_intersect <- NA
-centroid_edge$buffer_area_inside <- NA
-centroid_edge$buffer_area_outside <- NA
-centroid_edge$area_density_inside <- NA
-centroid_edge$area_outside_estimate <- NA
-centroid_edge$building_area_estimated_total <- NA
 centroid_edge$avg_neighbour_area <- NA
 centroid_edge$distance_sd_neighbours <- NA
-centroid_edge$inside_border <- NA
+centroid_edge$include_in_analysis <- NA
 
 for (i in seq_len(nrow(buffer_50m))) {
   
@@ -296,161 +114,73 @@ for (i in seq_len(nrow(buffer_50m))) {
   neighbour_ids <- count_neighbour_50[[i]]
   buildings_all_50 <- merged_data[neighbour_ids, ]
   
+  # scip, if no neighbour
   if (nrow(buildings_all_50) == 0) next
   
-  # Buffer coverage check
-  buffer_total_area <- st_area(buffer_i)
-  buffer_inside_border <- st_area(st_intersection(buffer_i, border_2))
+  # Area of buffer inside border_2
+  buffer_inside <- st_intersection(buffer_i, border_2)
+  buffer_inside_area <- st_area(buffer_inside)
+  #precentage of buffer-area inside border
+  share_inside <- as.numeric(buffer_inside_area) / as.numeric(buffer_total_area)
   
-  share_inside <- as.numeric(buffer_inside_border) / as.numeric(buffer_total_area)
-  centroid_edge$inside_border[i] <- ifelse(share_inside >= 0.95, 1, 0)
+  # Only continoue with current [i] if buffer-area min. 95% within border_2
+  if (share_inside < 0.95) {
+    centroid_edge$include_in_analysis[i] <- 0
+    next
+  } else {
+    centroid_edge$include_in_analysis[i] <- 1
+  }
   
-  if (share_inside < 0.95) next
-  
+  # calculating whole buffer build up area
   building_area <- st_area(buildings_all_50)
   building_intersect <- st_intersection(buildings_all_50, buffer_i)
   area_intersect <- st_area(building_intersect)
   
+  # Saving Build-Up Area in [i]
   centroid_edge$building_area_intersect[i] <- sum(as.numeric(area_intersect))
-  centroid_edge$building_area_full[i] <- sum(as.numeric(area_intersect))
   
-  building_area_intersect_percentage <- as.numeric((area_intersect / building_area) * 100)
+  # For neighbour count:: keeping only neighbours with min. 50% area inside buffer
+  clipped_pct <- as.numeric((area_intersect / building_area) * 100)
+  filtered_ids <- neighbour_ids[clipped_pct >= 50 & neighbour_ids != i]
+  centroid_edge$neighbour_50m_filtered[i] <- length(filtered_ids)
   
-  neighbours_filtered <- neighbour_ids[building_area_intersect_percentage >= 50]
-  neighbours_filtered <- neighbours_filtered[neighbours_filtered != i]
-  centroid_edge$neighbour_50m_filtered[i] <- length(neighbours_filtered)
-  
-  centroid_edge$buffer_area_inside[i] <- as.numeric(buffer_inside_border)
-  buffer_outside_border <- max(0, as.numeric(buffer_total_area - buffer_inside_border))
-  centroid_edge$buffer_area_outside[i] <- buffer_outside_border
-  
-  if (as.numeric(buffer_inside_border) > 0) {
-    neighbour_density <- centroid_edge$neighbour_50m_filtered[i] / as.numeric(buffer_inside_border)
-    centroid_edge$neighbour_50m_outside_estimate[i] <- neighbour_density * buffer_outside_border
-    area_density_inside <- centroid_edge$building_area_full[i] / as.numeric(buffer_inside_border)
-    centroid_edge$area_density_inside[i] <- area_density_inside
-    centroid_edge$area_outside_estimate[i] <- area_density_inside * buffer_outside_border
-    centroid_edge$building_area_estimated_total[i] <- centroid_edge$building_area_full[i] + centroid_edge$area_outside_estimate[i]
-  } else {
-    centroid_edge$neighbour_50m_outside_estimate[i] <- NA
-    centroid_edge$building_area_outside_estimate[i] <- NA
+  # Calculating average neighbouring area
+  if (length(filtered_ids) > 0) {
+    filtered <- merged_data[filtered_ids, ]
+    centroid_edge$avg_neighbour_area[i] <- mean(as.numeric(st_area(filtered)))
   }
-  
-  if (length(neighbours_filtered) > 0) {
-    filtered_buildings <- merged_data[neighbours_filtered, ]
-    avg_area <- mean(as.numeric(st_area(filtered_buildings)))
-    centroid_edge$avg_neighbour_area[i] <- avg_area
-  } else {
-    centroid_edge$avg_neighbour_area[i] <- NA
-  }
-  
-  neighbour_ids <- neighbour_ids[neighbour_ids != i]
-  if (length(neighbour_ids) >= 3) {
-    center_i <- st_coordinates(centroid[i, ])
-    neighbour_coords <- st_coordinates(centroid[neighbour_ids, ])
-    dists <- sqrt((neighbour_coords[,1] - center_i[1])^2 + (neighbour_coords[,2] - center_i[2])^2)
+    #Standard deviation of neighbour distances with at least three neighbours
+  if (length(filtered_ids) >= 3) {
+    #coordinated current building[i]
+    center <- st_coordinates(centroid_edge[i, ])
+    #coordinated filtered neighbours of current building[i]
+    neighbours_coords <- st_coordinates(centroid_edge[filtered_ids, ])
+    #calculating euclidean distance between current building and his filtered neighbours
+    dists <- sqrt((neighbours_coords[, 1] - center[1])^2 +
+                    (neighbours_coords[, 2] - center[2])^2)
+    #Standard deviation of distance
     centroid_edge$distance_sd_neighbours[i] <- sd(dists)
-  } else {
-    centroid_edge$distance_sd_neighbours[i] <- NA
   }
 }
 
-# Join results to merged_data_edge
+# Join new columns to polygones merged_data
 merged_data_edge <- merged_data %>%
   left_join(
     centroid_edge %>%
       st_drop_geometry() %>%
-      select(poly_id, neighbour_50m_filtered, area_density_inside, avg_neighbour_area, distance_sd_neighbours, inside_border),
+      select(poly_id, neighbour_50m_filtered, building_area_intersect, avg_neighbour_area, distance_sd_neighbours, include_in_analysis),
     by = "poly_id"
   )
 
-# individual Building area
-merged_data$building_area_individual <- round(as.numeric(st_area(merged_data)))
-
-centroid_edge <- centroid_edge %>%
-  left_join(
-    merged_data %>% st_drop_geometry() %>% select(poly_id, building_area_individual, neighbour_50m),
-    by = "poly_id"
-  )
-# classify
-merged_data$building_area_class <- floor(merged_data$building_area / 50) 
-
-# How many Buildings per class?
-c <- merged_data %>%
-  count(building_area_class)
-
-# # classify
-# breaks <- seq(0, 4488 , by = 100)
-# 
-# ggplot(merged_data, aes(x = factor(building_area), fill = factor(building_area))) +
-#   geom_bar() +
-#   scale_fill_viridis_d(option = "H")+
-#   facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")))+
-#   theme(
-#     legend.position = "none")
-
-##### Chain buildings and area #################################################
-library(igraph)
-
-# Matrix of touching building
-touch_list <- st_touches(merged_data)
-
-graph <- graph_from_adj_list(touch_list, mode = "all")
-
-components <- components(graph)
-
-merged_data$group_id <- components$membership
-
-#solo buildings
-deg <- degree(graph)
-merged_data$group_id[deg == 0] <- 0
-
-#solor buildings become value 0
-merged_data$group_id[merged_data$group_id != 0] <- merged_data$group_id[merged_data$group_id != 0] + 1
-
-#Counting Buildings oer group_id and adding them in new column "group_count"
-merged_data <- merged_data %>%
-  add_count(group_id, name = "group_count")
-
-#Calculating area per group
-merged_data <- merged_data %>%
-  group_by(group_id) %>%
-  mutate(group_area = sum(building_area_individual, na.rm = TRUE)) %>%
-  ungroup()
-
-# Keeping area for solo buildings
-merged_data <- merged_data %>%
-  mutate(
-    group_area_adjusted = if_else(
-      group_id == 0,
-      building_area_individual,
-      group_area
-    )
-  )
-
-#-----Calculating Indizes -----------------------------------------------------------------
-#area of Buffer'
-buffer_area_50m
-# Building Area within Buffer
-centroid_edge$building_area_intersect
-#Area of individual Buildings
-centroid_edge$building_area_individual
-
-
-#....Surrounding index---dont know...-------------------------------------------
-building_area_individual <- centroid_edge$building_area_individual
-building_area_buffer <- centroid_edge$building_area_intersect
-free_area <- buffer_area_50m - centroid_edge$building_area_intersect
-buffer_area_50m
-
-# dont knowif this could be intresting
-centroid_edge$surrounding_index <-  round(as.numeric(((building_area_individual/building_area_buffer)* (1*(free_area/buffer_area_50m)))),2)
+#*******************************************************************************
+#**** CALCULATING MORE INDICES *************************************************
+#*******************************************************************************
 
 #---- Density-Index ------------------------------------------------------------
 building_area_individual
 building_area_buffer
 
-centroid_edge$building_area_density_index <- round(as.numeric((building_area_individual/building_area_buffer)),2)
+merged_data_edge$building_area_density_index <- round(as.numeric((merged_data_edge$building_area_individual/merged_data_edge$building_area_intersect)),2)
 
 #---- Building dominanz ----------------------------------------------
 #Mixing relative area with neighbour density
@@ -458,13 +188,15 @@ centroid_edge$building_area_density_index <- round(as.numeric((building_area_ind
 # A high value means that a big Buildings is in a high density environment
 # mean value means that the a big building is in a loose neighbourhood or a small building in a high density neighbourhood
 # small value: small Building with view neighbours --> less spatial dominanz
-building_area_intersect <- centroid_edge$building_area_intersect
-neighbours_count <- centroid_edge$neighbour_50m_filtered
 
-centroid_edge$neighbour_building_dominanz <- round((building_area_individual /building_area_intersect) *neighbours_count,2)
+merged_data_edge$neighbour_building_dominanz <- 
+  round(((merged_data_edge$building_area_individual /merged_data_edge$building_area_intersect) *merged_data_edge$neighbour_50m_filtered),2)
 
+#....Surrounding index---dont know...-------------------------------------------
+# dont knowif this could be intresting
+merged_data_edge$surrounding_index <-  round(as.numeric(((merged_data_edge$building_area_individual/merged_data_edge$building_area_intersect)* (1*((buffer_total_area - merged_data_edge$building_area_intersect)/buffer_total_area)))),2)
 
-#---- Left join indices --------------------------------------------------------
+#---- JOIN ---------------------------------------------------------------------
 
 merged_data_edge <- merged_data_edge %>%
   left_join(
@@ -473,26 +205,63 @@ merged_data_edge <- merged_data_edge %>%
       select(poly_id, surrounding_index, building_area_density_index, neighbour_building_dominanz),
     by = "poly_id"
   )
+#*******************************************************************************
+#**** BUILDING CLUSTERS ********************************************************
+#*******************************************************************************
+merged_data_edge$building_area_individual <- st_area(merged_data_edge)
+merged_data_edge$building_area_individual <- as.numeric(st_area(merged_data_edge))
 
-p_map <- ggplot() +
-  geom_sf(data = merged_data_edge, aes(fill = surrounding_index), color = NA)+
-  theme(
-    legend.position = "none"
+
+# Matrix of touching building
+touch_list <- st_touches(merged_data_edge)
+
+graph <- graph_from_adj_list(touch_list, mode = "all")
+
+components <- components(graph)
+
+merged_data_edge$group_id <- components$membership
+
+#solo buildings
+deg <- degree(graph)
+merged_data_edge$group_id[deg == 0] <- 0
+
+#solor buildings become value 0
+merged_data_edge$group_id[merged_data_edge$group_id != 0] <- merged_data_edge$group_id[merged_data_edge$group_id != 0] + 1
+
+#Counting Buildings oer group_id and adding them in new column "group_count"
+merged_data_edge <-merged_data_edge %>%
+  add_count(group_id, name = "group_count")
+
+#Calculating area per group
+merged_data_edge <- merged_data_edge %>%
+  group_by(group_id) %>%
+  mutate(group_area = sum(building_area_individual, na.rm = TRUE)) %>%
+  ungroup()
+
+# Keeping area for solo buildings
+merged_data_edge <- merged_data_edge %>%
+  mutate(
+    group_area_adjusted = as.numeric(if_else(
+      group_id == 0,
+      building_area_individual,
+      group_area
+    ))
   )
-################################################################################
-################################################################################
-#### PLOTTING PART #############################################################
-################################################################################
-################################################################################
 
-#### Connected Buildings #######################################################
-#Used Dataset: merged_data'
-#Used Parameters:
-#
-#
-#
-#
-#---- Map -----
+#save everything as numeric value and round to whole numbers
+merged_data_edge <- merged_data_edge %>%
+  mutate(
+    building_area_individual = round(as.numeric(building_area_individual), 0),
+    group_area = round(as.numeric(group_area), 0),
+    group_area_adjusted = round(as.numeric(group_area_adjusted), 0),
+    building_area_intersect = round(as.numeric(building_area_intersect), 0),
+    avg_neighbour_area = round(as.numeric(avg_neighbour_area), 0),
+    distance_sd_neighbours = round(as.numeric(distance_sd_neighbours), 0)
+  )
+
+#*******************************************************************************
+#**** PLOTTING AREA ************************************************************
+#*******************************************************************************
 
 #---- Matrix Plot ----
 library(cowplot)
