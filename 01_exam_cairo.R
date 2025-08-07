@@ -284,8 +284,10 @@ merged_data_edge <- merged_data_edge %>%
 #*******************************************************************************
 #**** PLOTTING AREA ************************************************************
 #*******************************************************************************
-
+#*
+################################################################################
 #**** NUMBER OF NEIGHBOURS WITHIN A RADIUS OF 50m ******************************
+#################################################################################
 # More plotting space under Polygones
 bbox <- st_bbox(merged_data_edge)
 buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
@@ -391,9 +393,13 @@ combined_neighbour_edge <- map_neighbours_edge +
 
 ggsave("cairo_neighbours_buffer50_without_edge.png", combined_neighbour_edge , width = 15, height = 18, units = "cm", dpi = 600)
 
-#---- Matrix Plot ----
+
+################################################################################
+#**** PATCHES ******************************************************************
+################################################################################
+
 #no solo buildings
-grouped_data <- merged_data %>%
+grouped_data <- merged_data_edge %>%
   filter(group_id != 0)
 
 #classify data in three groups with same range
@@ -402,7 +408,7 @@ classify_minmax <- function(x, n = 3) {
   cut(x, breaks = breaks, include.lowest = TRUE, labels = FALSE)
 }
 
-
+# classify with function
 non_solo_buildings <- grouped_data %>%
   mutate(
     area_class = classify_minmax(group_area_adjusted),
@@ -422,6 +428,10 @@ print_class_breaks(non_solo_buildings$group_area_adjusted, n = 3, varname = "gro
 print_class_breaks(non_solo_buildings$group_count, n = 3, varname = "group_count")
 
 #own category for solo buildings
+solo_buildings <- merged_data_edge %>%
+  filter(group_id == 0) %>%
+  mutate(group_matrix = "solo")
+
 solo_buildings <- solo_buildings %>%
   mutate(group_matrix = "solo")
 
@@ -430,40 +440,37 @@ merged_data_classified <- bind_rows(non_solo_buildings, solo_buildings)
 
 # colors
 bi_colors <- c(
-  "1-1" = "#e9e9e9ff", "2-1" = "#e9dda9ff", "3-1" = "#e8ac00ff",
-  "1-2" = "#adcbd5ff", "2-2" = "#acaaadff", "3-2" = "#a96100ff",
-  "1-3" = "#4c97b6ff", "2-3" = "#336081ff", "3-3" = "#000000",
-  "solo" = "#4F0000"
+  "1-1" = "#c5c5c5", "2-1" = "#7fb2c6",  "3-1" = "#1f6d99", 
+  "1-2" = "#d5b96d","2-2" = "#7d7d7d","3-2" = "#234f71",
+  "1-3" = "#d99100",   "2-3" = "#7b4000", "3-3" = "#000000", 
+  "solo" = "#e6b8b7"
 )
 
-
-#map
-
-p_map <- ggplot() +
+#---- Map ---------------------------------------------------------------------- 
+patches_map <- ggplot() +
   geom_sf(data = merged_data_classified, aes(fill = group_matrix), color = NA) +
   scale_fill_manual(values = bi_colors, name = "Group Composition") +
-  ##############theme_minimal() +
   coord_sf() +
   labs(title = "Building Connectivity and Area",
-       subtitle = "Group size vs. Group area (excluding solo buildings)") +
+       subtitle = "Group size vs. group area (excluding single buildings)") +
   theme(
     plot.margin = margin(5, 5, 5, 5),
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 25, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 16),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    plot.title = element_text(color = "grey20", size = 25, face = "bold"),
+    plot.subtitle = element_text(color = "grey20", size = 15),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     axis.title = element_blank()
   )
-p_map
+patches_map
 
-#matrix legend
-legend_df <- expand.grid(
+#---- MAtrix plot --------------------------------------------------------------
+matrix_plot <- expand.grid(
   area_class = 1:3,
   count_class = 1:3
 ) %>%
@@ -472,7 +479,7 @@ legend_df <- expand.grid(
     fill = bi_colors[group_matrix]
   )
 
-legend_plot <- ggplot(legend_df, aes(x = area_class, y = count_class, fill = fill)) +
+patches_matrix <- ggplot(matrix_plot, aes(x = area_class, y = count_class, fill = fill)) +
   geom_tile() +
   scale_fill_identity() +
   scale_x_continuous(breaks = 1:3, labels = c("Small\n[101-3380 m²]", "Medium\n3380-6660 m²]", "Large\n[6660-9940 m²]")) +
@@ -480,184 +487,131 @@ legend_plot <- ggplot(legend_df, aes(x = area_class, y = count_class, fill = fil
   labs(x = "Group Area", y = "Group Size") +
   coord_equal() +
   theme(
-    axis.title = element_text(size = 10, family = "Source Sans 3", color = "#F2F2DE", face="bold"),
-    axis.title = element_text(hjust=0.5),
-    axis.text  = element_text(size = 8, family = "Source Sans 3", color = "#F2F2DE"),
-    axis.text.x = element_text(angle = 90, hjust = 1),
+    axis.title = element_text(size = 10, family = "Source Sans 3", color = "grey20", face="bold"),
+    axis.text  = element_text(size = 8, family = "Source Sans 3", color = "grey20", hjust=0.5),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
     panel.grid = element_blank(),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA)
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.ticks.length = unit(0, "pt"),
+    axis.ticks = element_blank(),
   )
+patches_matrix
 
 # combine map and legend
-combined_plot <- ggdraw() +
-  draw_plot(p_map, x = 0, y = 0, width = 1, height = 1) +
-  draw_plot(legend_plot, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
+patches_plot <- ggdraw() +
+  draw_plot(patches_map, x = 0, y = 0, width = 1, height = 1) +
+  draw_plot(patches_matrix, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
 
 
-combined_plot
+patches_plot
 
 showtext_opts(dpi = 600)
 
-ggsave("cairo_connected_buildings.png", combined_plot , width = 24, height = 18, units = "cm", dpi = 600)
+ggsave("cairo_patches.png", patches_plot , width = 24, height = 18, units = "cm", dpi = 600)
 
-######## Same map but more classes #############################################
-#remotes::install_github("nowosad/colorblindcheck")
-library(colorblindcheck)
-library(cowplot)
-library(biscale)
 
-library(pals)
-bivcol = function(pal){
-  tit = substitute(pal)
-  pal = pal()
-  ncol = length(pal)
-  image(matrix(seq_along(pal), nrow = sqrt(ncol)),
-        axes = FALSE, 
-        col = pal, 
-        asp = 1)
-  mtext(tit)
-}
-bivcol(stevens.bluered)
-pal_fun <- biscale::bi_pal(pal = "PurpleOr", dim = 4, flip_axes = T, rotate_pal = F)
-colors_vector <- pal_fun()
-print(colors_vector)
+################################################################################
+#**** PATCHES WITH QUANTILES ***************************************************
+################################################################################
 
-#no solo buildings
-grouped_data <- merged_data %>%
-  filter(group_id != 0)
-
-#classify data in three groups with same range
-classify_minmax_4 <- function(x, n = 4) {
-  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
-  cut(x, breaks = breaks, include.lowest = TRUE, labels = FALSE)
+classify_quantiles <- function(x, n = 3) {
+  breaks_q <- quantile(x, probs = seq(0, 1, length.out = n + 1), na.rm = TRUE)
+  cut(x, breaks = breaks_q, include.lowest = TRUE, labels = FALSE)
 }
 
-
-non_solo_buildings_4 <- grouped_data %>%
+non_solo_buildings_q <- grouped_data %>%
   mutate(
-    area_class = classify_minmax(group_area_adjusted),
-    count_class = classify_minmax(group_count),
-    group_matrix = paste0(area_class, "-", count_class)
+    area_class_q = classify_quantiles(group_area_adjusted),
+    count_class_q = classify_quantiles(group_count),
+    group_matrix_q = paste0(area_class_q, "-", count_class_q)
   )
 
-# Checking classes
-print_class_breaks_4 <- function(x, n = 4, varname = "") {
-  breaks <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n + 1)
-  cat(paste0("Breaks for ", varname, ":\n"))
-  print(breaks)
+solo_buildings_q <- merged_data_edge %>%
+  filter(group_id == 0) %>%
+  mutate(group_matrix_q = "solo")
+
+merged_data_classified_q <- bind_rows(non_solo_buildings_q, solo_buildings_q)
+
+print_class_breaks <- function(x, n = 3, varname = "") {
+  breaks <- quantile(x, probs = seq(0, 1, length.out = n + 1), na.rm = TRUE)
+  cat(paste0("Quantile breaks for ", varname, ":\n"))
+  print(round(breaks, 0))
   invisible(breaks)
 }
+print_class_breaks(non_solo_buildings_q$group_area_adjusted, n = 3, varname = "group_area_adjusted")
+print_class_breaks(non_solo_buildings_q$group_count, n = 3, varname = "group_count")
 
-print_class_breaks_4(non_solo_buildings$group_area_adjusted, n = 4, varname = "group_area_adjusted")
-print_class_breaks_4(non_solo_buildings$group_count, n = 4, varname = "group_count")
-
-#own category for solo buildings
-solo_buildings <- solo_buildings %>%
-  mutate(group_matrix = "solo")
-
-#combine
-merged_data_classified <- bind_rows(non_solo_buildings, solo_buildings)
-
-# colors
-bi_colors_4 <- c(
-  "1-1" = "#e9e9e9ff", "2-1" = "#A89DB9", "3-1" = "#7E6A9F", "4-1"="#563787",
-  "1-2" = "#D3AF95", "2-2" = "#A88283", "3-2" = "#7E5771", "4-2"="#562D5F",
-  "1-3" = "#D28753", "2-3" = "#A86448", "3-3" = "#7E433E", "4-3"="#552335",
-  "1-4" = "#D25601", "2-4" = "#A84001", "3-4" = "#7E2B01", "4-4"="#551601",
-  "solo" = "red"
-)
-bi_colors_4 <- c(
-"1-1" ="#D9D9D9",
-"2-1"= "#D3BBA5",
-"3-1" ="#C38D6E",
-"4-1" ="#BF6015",
-"1-2" ="#B7A6C2",
-"2-2" ="#B0919D",
-"3-2" ="#A15E57",
-"4-2" ="#9A3B10",
-"1-3" ="#9272B2",
-"2-3" ="#8A5D8D",
-"3-3" ="#7B2C47",
-"4-3" ="#741000",
-"1-4" ="#6C63AC",
-"2-4" ="#654E87",
-"3-4" ="#561C41",
-"4-4" ="#4F0000",
-"solo" = "red"
+bi_colors_q <- c(
+  "1-1" = "#c5c5c5", "2-1" = "#7fb2c6",  "3-1" = "#1f6d99", 
+  "1-2" = "#d5b96d", "2-2" = "#7d7d7d",  "3-2" = "#234f71",
+  "1-3" = "#d99100", "2-3" = "#7b4000",  "3-3" = "#000000", 
+  "solo" = "#e6b8b7"
 )
 
-
-bi_colors <- c(
-  "1-1" = "#D3D3D3", "2-1" = "#e9dda9ff", "3-1" = "#e8ac00ff",
-  "1-2" = "#adcbd5ff", "2-2" = "#acaaadff", "3-2" = "#a96100ff",
-  "1-3" = "#4c97b6ff", "2-3" = "#336081ff", "3-3" = "#000000",
-  "solo" = "red"
-)
-#map
-
-p_map_4 <- ggplot() +
-  geom_sf(data = merged_data_classified, aes(fill = group_matrix), color = NA) +
-  scale_fill_manual(values = bi_colors_4, name = "Group Composition") +
-  theme_minimal() +
+#---- Map ----------------------------------------------------------------------
+patches_map_q <- ggplot() +
+  geom_sf(data = merged_data_classified_q, aes(fill = group_matrix_q), color = NA) +
+  scale_fill_manual(values = bi_colors_q, name = "Group Composition") +
   coord_sf() +
-  labs(title = "Building Connectivity and Area",
-       subtitle = "Group size vs. Group area (excluding solo buildings)") +
+  labs(
+    title = "Building Connectivity and Area",
+    subtitle = "Group size vs. group area (excluding single buildings)"
+  ) +
   theme(
     plot.margin = margin(5, 5, 5, 5),
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 25, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 16),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    plot.title = element_text(color = "grey20", size = 25, face = "bold"),
+    plot.subtitle = element_text(color = "grey20", size = 15),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     axis.text = element_blank(),
     axis.ticks = element_blank(),
     axis.title = element_blank()
   )
-p_map
 
-#matrix legend
-legend_df_4 <- expand.grid(
-  area_class = 1:4,
-  count_class = 1:4
+patches_map_q
+
+#---- MAtrix plot --------------------------------------------------------------
+matrix_plot_q <- expand.grid(
+  area_class_q = 1:3,
+  count_class_q = 1:3
 ) %>%
   mutate(
-    group_matrix = paste0(area_class, "-", count_class),
-    fill = bi_colors_4[group_matrix]
+    group_matrix_q = paste0(area_class_q, "-", count_class_q),
+    fill = bi_colors_q[group_matrix_q]
   )
 
-
-
-legend_plot_4 <- ggplot(legend_df_4, aes(x = area_class, y = count_class, fill = fill)) +
+patches_matrix_q <- ggplot(matrix_plot_q, aes(x = area_class_q, y = count_class_q, fill = fill)) +
   geom_tile() +
   scale_fill_identity() +
-  scale_x_continuous(breaks = 1:4, labels = c("Small\n[101-3380 m²]", "Medium\n3380-6660 m²]", "Large\n[6660-9940 m²]", "....")) +
-  scale_y_continuous(breaks = 1:4, labels = c("Low\n[2-15]", "Medium\n[16-29]", "High\n[30-43]", "...")) +
+  scale_x_continuous(breaks = 1:3, labels = c("Small\n[101-1362 m²]", "Medium\n1363-2587 m²]", "Large\n[2588-9940 m²]")) +
+  scale_y_continuous(breaks = 1:3, labels = c("Low\n[2-8]", "Medium\n[9-15]", "High\n[16-43]")) +
   labs(x = "Group Area", y = "Group Size") +
   coord_equal() +
   theme(
-    axis.title = element_text(size = 10, family = "Source Sans 3", color = "#F2F2DE", face="bold", hjust = 0.5),
-    axis.text  = element_text(size = 8, family = "Source Sans 3", color = "#F2F2DE"),
-    axis.text.x = element_text(angle = 90, hjust = 1),
+    axis.title = element_text(size = 10, family = "Source Sans 3", color = "grey20", face = "bold"),
+    axis.text = element_text(size = 8, family = "Source Sans 3", color = "grey20"),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
     panel.grid = element_blank(),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA)
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    axis.ticks.length = unit(0, "pt"),
+    axis.ticks = element_blank()
   )
 
-# combine map and legend
-combined_plot_4 <- ggdraw() +
-  draw_plot(p_map_4, x = 0, y = 0, width = 1, height = 1) +
-  draw_plot(legend_plot_4, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
+#---- Combine ------------------------------------------------------------------
 
-
-combined_plot_4
+patches_plot_q <- cowplot::ggdraw() +
+  cowplot::draw_plot(patches_map_q, x = 0, y = 0, width = 1, height = 1) +
+  cowplot::draw_plot(patches_matrix_q, x = 0.03, y = 0.05, width = 0.3, height = 0.3)
 
 showtext_opts(dpi = 600)
 
-ggsave("cairo_connected_buildings_4.png", combined_plot_4 , width = 24, height = 18, units = "cm", dpi = 600)
+ggsave("cairo_patches_quantiles.png", patches_plot_q, width = 24, height = 18, units = "cm", dpi = 600)
 
 
 
