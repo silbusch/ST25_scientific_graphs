@@ -13,6 +13,7 @@ library(ggplot2)
 library(patchwork)
 library(concaveman)
 library(igraph)
+library(cowplot)
 
 library(sysfonts)
 library(showtextdb)
@@ -34,6 +35,9 @@ unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scien
 
 structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
 
+plots <- ("enter here path for exporting plots")
+#mine
+#plots <- ...
 #*******************************************************************************
 #**** PREPARE DATA *************************************************************
 #*******************************************************************************
@@ -172,15 +176,36 @@ merged_data_edge <- merged_data %>%
     by = "poly_id"
   )
 
+#---- area--------
+#Individual Building area
+merged_data_edge$building_area_individual <- st_area(merged_data_edge)
+merged_data_edge$building_area_individual <- as.numeric(st_area(merged_data_edge))
+
 #*******************************************************************************
 #**** CALCULATING MORE INDICES *************************************************
 #*******************************************************************************
 
-#---- Density-Index ------------------------------------------------------------
-building_area_individual
-building_area_buffer
+#---- Dataset without the edge -------------------------------------------------
+#creating a dataset without the edge
+merged_data_clean <- merged_data_edge %>%
+  filter(include_in_analysis == 1)
 
-merged_data_edge$building_area_density_index <- round(as.numeric((merged_data_edge$building_area_individual/merged_data_edge$building_area_intersect)),2)
+# join all missing columns
+merged_data_clean <- merged_data_edge %>%
+  filter(include_in_analysis == 1) %>%
+  left_join(
+    merged_data_edge %>%
+      st_drop_geometry() %>%
+      select(poly_id, building_area_intersect),  # nur was du brauchst
+    by = "poly_id"
+  )
+
+
+#---- Density-Index ------------------------------------------------------------
+# building_area_individual <- merged_data_edge$building_area_individual 
+# building_area_intersect <- merged_data_edge$building_area_intersect
+
+merged_data_clean$building_area_density_index <- round(as.numeric((merged_data_clean$building_area_individual / merged_data_clean$building_area_intersect.x)),2)
 
 #---- Building dominanz ----------------------------------------------
 #Mixing relative area with neighbour density
@@ -189,28 +214,25 @@ merged_data_edge$building_area_density_index <- round(as.numeric((merged_data_ed
 # mean value means that the a big building is in a loose neighbourhood or a small building in a high density neighbourhood
 # small value: small Building with view neighbours --> less spatial dominanz
 
-merged_data_edge$neighbour_building_dominanz <- 
-  round(((merged_data_edge$building_area_individual /merged_data_edge$building_area_intersect) *merged_data_edge$neighbour_50m_filtered),2)
+merged_data_clean$neighbour_building_dominanz <- 
+  round(((merged_data_clean$building_area_individual /merged_data_clean$building_area_intersect.x) *merged_data_clean$neighbour_50m_filtered),2)
 
 #....Surrounding index---dont know...-------------------------------------------
 # dont knowif this could be intresting
-merged_data_edge$surrounding_index <-  round(as.numeric(((merged_data_edge$building_area_individual/merged_data_edge$building_area_intersect)* (1*((buffer_total_area - merged_data_edge$building_area_intersect)/buffer_total_area)))),2)
+merged_data_clean$surrounding_index <-  round(as.numeric(((merged_data_clean$building_area_individual/merged_data_clean$building_area_intersect.x)* (1*((buffer_total_area -merged_data_clean$building_area_intersect.x)/buffer_total_area)))),2)
 
 #---- JOIN ---------------------------------------------------------------------
 
 merged_data_edge <- merged_data_edge %>%
   left_join(
-    centroid_edge %>%
+    merged_data_clean %>%
       st_drop_geometry() %>%
-      select(poly_id, surrounding_index, building_area_density_index, neighbour_building_dominanz),
+      select(poly_id, building_area_density_index, neighbour_building_dominanz,surrounding_index),
     by = "poly_id"
   )
 #*******************************************************************************
 #**** BUILDING CLUSTERS ********************************************************
 #*******************************************************************************
-merged_data_edge$building_area_individual <- st_area(merged_data_edge)
-merged_data_edge$building_area_individual <- as.numeric(st_area(merged_data_edge))
-
 
 # Matrix of touching building
 touch_list <- st_touches(merged_data_edge)
@@ -263,9 +285,113 @@ merged_data_edge <- merged_data_edge %>%
 #**** PLOTTING AREA ************************************************************
 #*******************************************************************************
 
-#---- Matrix Plot ----
-library(cowplot)
+#**** NUMBER OF NEIGHBOURS WITHIN A RADIUS OF 50m ******************************
+# More plotting space under Polygones
+bbox <- st_bbox(merged_data_edge)
+buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
 
+# Preparing the edge of the AOI
+merged_data_edge$fill_group <- ifelse(
+  merged_data_edge$include_in_analysis == 0,
+  "Buildings excluded from analysis",
+  as.character(merged_data_edge$neighbour_50m_filtered)
+)
+
+levels_sorted <- sort(as.numeric(unique(merged_data_edge$fill_group[merged_data_edge$fill_group != "Buildings excluded from analysis"])))
+levels_sorted <- c(as.character(levels_sorted), "Buildings excluded from analysis")
+merged_data_edge$fill_group <- factor(merged_data_edge$fill_group, levels = levels_sorted)
+
+viridis_colors <- viridis::viridis(length(levels(merged_data_edge$fill_group)) - 1, option = "H")
+fill_colors <- c("Buildings excluded from analysis" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "Buildings excluded from analysis"]))
+
+#---- MAP ----------------------------------------------------------------------
+
+map_neighbours_edge <- ggplot() +
+  geom_sf(
+    data = merged_data_edge,
+    aes(fill = fill_group),
+    color = NA
+  ) +
+  scale_fill_manual(
+    values = fill_colors,
+    name = "Number of neighbours"
+  ) +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE
+  ) +
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Number of neighbouring buildings within a radius of 50 m"
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color = "#F2F2DE", size = 100, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 70),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    
+  )
+
+#map_neighbours_edge
+
+#---- Barplot ------------------------------------------------------------------
+
+# Excluding Buildings where inside_border == 0
+filtered_data <- merged_data_edge %>% 
+  filter(include_in_analysis == 1)
+
+bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  labs(
+    x = "Number of individual neighbours within a radius of 50 metres",
+    y = "Count",
+    fill = "Neighbours"
+  ) +
+  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
+  scale_x_discrete(breaks = as.character(seq(0, 54, 5))) +
+  scale_y_continuous(breaks = seq(0, 500, 100)) +
+  geom_hline(
+    yintercept = seq(0, 500, 100),
+    color = "#F2F2DE",
+    linetype = "dotted",
+    linewidth = 0.3
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold", colour = "#F2F2DE"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 40, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 50),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 50),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 60),
+    panel.spacing = unit(0.7, "cm")
+  )
+
+bar_neighbours_edge
+
+#---- Combine ------------------------------------------------------------------
+
+combined_neighbour_edge <- map_neighbours_edge +
+  inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+
+ggsave("cairo_neighbours_buffer50_without_edge.png", combined_neighbour_edge , width = 15, height = 18, units = "cm", dpi = 600)
+
+#---- Matrix Plot ----
 #no solo buildings
 grouped_data <- merged_data %>%
   filter(group_id != 0)
@@ -533,110 +659,6 @@ showtext_opts(dpi = 600)
 
 ggsave("cairo_connected_buildings_4.png", combined_plot_4 , width = 24, height = 18, units = "cm", dpi = 600)
 
-################################################################################
-#---- Map: Nieghbours Edge -----------------------------------------------------
-bbox <- st_bbox(merged_data_edge)
-buffer_y <- (bbox["ymax"] - bbox["ymin"]) * 0.50
-
-merged_data_edge$fill_group <- ifelse(
-  merged_data_edge$inside_border == 0,
-  "Buildings excluded from analysis",
-  as.character(merged_data_edge$neighbour_50m_filtered)
-)
-
-levels_sorted <- sort(as.numeric(unique(merged_data_edge$fill_group[merged_data_edge$fill_group != "Buildings excluded from analysis"])))
-levels_sorted <- c(as.character(levels_sorted), "Buildings excluded from analysis")
-merged_data_edge$fill_group <- factor(merged_data_edge$fill_group, levels = levels_sorted)
-
-viridis_colors <- viridis::viridis(length(levels(merged_data_edge$fill_group)) - 1, option = "H")
-fill_colors <- c("Buildings excluded from analysis" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "Buildings excluded from analysis"]))
-
-#---------------
-map_neighbours_edge <- ggplot() +
-  geom_sf(
-    data = merged_data_edge,
-    aes(fill = fill_group),
-    color = NA
-  ) +
-  scale_fill_manual(
-    values = fill_colors,
-    name = "Number of neighbours"
-  ) +
-  coord_sf(
-    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
-    expand = FALSE
-  ) +
-  labs(
-    title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Number of buildings within a radius of 50 metres"
-  ) +
-  theme(
-    legend.position = "none",
-    text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 100, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 70),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    
-  )
-
-
-map_neighbours_edge
-
-#---- Barplot: Nieghbours Edge -------------------------------------------------
-
-# Excluding Buildings where inside_border == 0
-filtered_data <- merged_data_edge %>% 
-  filter(inside_border == 1)
-
-bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
-  geom_bar() +
-  scale_fill_viridis_d(option = "H") +
-  labs(
-    x = "Number of individual neighbours within a radius of 50 metres",
-    y = "Count",
-    fill = "Neighbours"
-  ) +
-  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
-  scale_x_discrete(breaks = as.character(seq(0, 54, 5))) +
-  scale_y_continuous(breaks = seq(0, 500, 100)) +
-  geom_hline(
-    yintercept = seq(0, 500, 100),
-    color = "#F2F2DE",
-    linetype = "dotted",
-    linewidth = 0.3
-  ) +
-  theme(
-    legend.position = "bottom",
-    text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 40, face = "bold", colour = "#F2F2DE"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 40, face = "bold"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 50),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 50),
-    panel.background = element_rect(fill = NA, color = NA),
-    plot.background = element_rect(fill = NA, color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.ticks.y = element_blank(),
-    axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
-    strip.background = element_blank(),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 60),
-    panel.spacing = unit(0.7, "cm")
-  )
-
-bar_neighbours_edge
-
-#---- Combine ------------------------------------------------------------------
-
-combined_neighbour_edge <- map_neighbours_edge +
-  inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
-
-ggsave("cairo_neighbours_buffer50_without_edge.png", combined_neighbour_edge , width = 30, height = 18, units = "cm", dpi = 600)
 
 
 #---- calculating the orientation of each building -----------------------------
