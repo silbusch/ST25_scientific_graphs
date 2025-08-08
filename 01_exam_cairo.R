@@ -321,8 +321,8 @@ map_neighbours_edge <- ggplot() +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 12),
+    plot.title = element_text(color = "#F2F2DE", size = 80, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 60),
     plot.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.grid.major = element_blank(),
@@ -333,45 +333,40 @@ map_neighbours_edge <- ggplot() +
   )
 
 #---- Barplot ------------------------------------------------------------------
-
-# Excluding Buildings where inside_border == 0
 filtered_data <- merged_data_edge %>% 
   filter(include_in_analysis == 1)
+all_x <- 0:54
 
-bar_neighbours_edge <- ggplot(filtered_data, aes(x = factor(neighbour_50m_filtered), fill = factor(neighbour_50m_filtered))) +
-  geom_bar() +
-  scale_fill_viridis_d(option = "H") +
-  labs(
-    x = "Number of individual neighbours within a radius of 50 metres",
-    y = "Count",
-    fill = "Neighbours"
-  ) +
-  facet_wrap(~ type, labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space"))) +
-  scale_x_discrete(breaks = as.character(seq(0, 54, 5))) +
-  scale_y_continuous(breaks = seq(0, 500, 100)) +
-  geom_hline(
-    yintercept = seq(0, 500, 100),
-    color = "#F2F2DE",
-    linetype = "dotted",
-    linewidth = 0.3
-  ) +
+df_counts <- filtered_data %>%
+  mutate(neighbour_50m_filtered = as.integer(neighbour_50m_filtered)) %>%
+  count(type, neighbour_50m_filtered, name = "n") %>%
+  complete(type, neighbour_50m_filtered = all_x, fill = list(n = 0))
+# Excluding Buildings where inside_border == 0
+
+bar_neighbours_edge <- ggplot(df_counts,
+                              aes(x = neighbour_50m_filtered, y = n, fill = factor(neighbour_50m_filtered))) +
+  geom_col(width = 0.9) +
+  scale_x_continuous(breaks = seq(min(all_x), max(all_x), by = 5)) +
+  scale_fill_viridis_d(option = "H", guide = "none") +
+  facet_wrap(~ type,
+             labeller = as_labeller(c("1" = "Unstructured urban space",
+                                      "2" = "Structured urban space")),
+             scales = "free_y") +
+  labs(x = "Number of individual neighbours within 50 m", y = "Count") +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 10, face = "bold", colour = "#F2F2DE"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10, face = "bold"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 10),
+    axis.text.x = element_text(colour = "#F2F2DE", size = 50, face = "bold"),
+    axis.text.y = element_text(colour = "#F2F2DE", size = 50, face = "bold"),
+    axis.title.x = element_text(colour = "#F2F2DE", size = 50),
+    axis.title.y = element_text(colour = "#F2F2DE", size = 50, angle = 90),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.ticks.y = element_blank(),
-    axis.ticks = element_line(color = "#F2F2DE", linewidth = 0.3),
+    panel.grid = element_blank(),
     strip.background = element_blank(),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
-    panel.spacing = unit(0.7, "cm")
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", size = 50)
   )
+  
 
 bar_neighbours_edge
 
