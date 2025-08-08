@@ -5,18 +5,18 @@ Summer Term 2025 | Scientific Graphs | 04-GEO-SOS13-1
 
 The greyed-out buildings were included in the determination of the neighbours, but were not analysed themselves.
 
-<img width="3543" height="4251" alt="cairo_neighbours_buffer50_without_edge" src="https://github.com/user-attachments/assets/95edaac8-f591-4c80-8ff0-74459eed510e" />
+<img width="3543" height="4251" alt="cairo_neighbours_buffer50_without_edge" src="https://github.com/user-attachments/assets/17a4aa8f-f966-4db5-9094-66e47e138bc9" />
 
 ## Building patches
 
 Connected buildings were grouped together and their number and area were visualised in a binary representation. In this version, equal class intervals were used.
 Possible source of error: Inaccurate building classification can lead to an increase in individual buildings.
 
-<img width="5669" height="4251" alt="cairo_patches" src="https://github.com/user-attachments/assets/86facd53-355d-4548-9460-abbd2b5fa2aa" />
+<img width="5669" height="4251" alt="cairo_patches" src="https://github.com/user-attachments/assets/c78dcf03-7b15-413c-bc58-ab7d93d34b9b" />
 
 In this variant, quantiles were used for classification.
 
-<img width="5669" height="4251" alt="cairo_patches_quantiles" src="https://github.com/user-attachments/assets/2d6043b8-7739-4db6-8056-eff659c8c070" />
+<img width="5669" height="4251" alt="cairo_patches_quantiles" src="https://github.com/user-attachments/assets/fe9850ee-3bac-42d1-8742-8240826b60ef" />
 
 ## Average building size
 
