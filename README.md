@@ -1,7 +1,9 @@
 Summer Term 2025 | Scientific Graphs | 04-GEO-SOS13-1
 
 These graphics were created as part of the Scientific Graphs course at Julius Maximilian University of Würzburg.
+
 The used data set is not freely accessible.
+
 *Data Source: Henri Debray, German Aerospace Center (DLR)*
 
 ## Neighbouring building
@@ -14,6 +16,7 @@ The greyed-out buildings were included in the determination of the neighbours, b
 ## Building patches
 
 **Note:** Connected buildings were grouped together and their number and area were visualised in a binary representation. In this version, equal class intervals were used.
+
 *Possible source of error: Inaccurate spatial building classification can lead to an increase in individual buildings.*
 
 <img width="5669" height="4251" alt="cairo_patches" src="https://github.com/user-attachments/assets/c78dcf03-7b15-413c-bc58-ab7d93d34b9b" />
