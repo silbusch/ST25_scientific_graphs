@@ -1,6 +1,6 @@
 Summer Term 2025 | Scientific Graphs | 04-GEO-SOS13-1
 
-##Neighbouring building
+## Neighbouring building
 
 The greyed-out buildings were included in the determination of the neighbours, but were not analysed themselves.
 
