@@ -22,10 +22,10 @@ In this variant, quantiles were used for classification.
 
 Here, the edge buildings were removed, but still included in the analysis for the remaining buildings.
 
-<img width="3543" height="4251" alt="cairo_avg_building_area" src="https://github.com/user-attachments/assets/2c714670-6f63-414c-85b2-866e0d961090" />
+<img width="3543" height="4251" alt="cairo_avg_building_area" src="https://github.com/user-attachments/assets/52ef6826-f1b0-46c0-91e4-bfc0f8af01d3" />
 
 # Building dominance
 
 *Disclaimer: X-axis scaling problem due to discrete scaling.*
 
-<img width="3543" height="4251" alt="cairo_building_area_dominance" src="https://github.com/user-attachments/assets/96036540-5903-4082-aa6a-1838db0b3644" />
+![Uploading cairo_building_area_dominance.png…]()
