@@ -1,4 +1,4 @@
-Summer Term 2025 | Scientific Graphs | 04-GEO-SOS13-1
+# Summer Term 2025 | Scientific Graphs | 04-GEO-SOS13-1
 
 These graphics were created as part of the Scientific Graphs course at Julius Maximilian University of Würzburg.
 
