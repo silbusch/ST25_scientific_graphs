@@ -21,6 +21,7 @@ The greyed-out buildings were included in the determination of the neighbours, b
 
 <img width="5669" height="4251" alt="cairo_patches" src="https://github.com/user-attachments/assets/c78dcf03-7b15-413c-bc58-ab7d93d34b9b" />
 
+
 **Note:** In the following version, quantiles were used to determine the class boundaries.
 
 <img width="5669" height="4251" alt="cairo_patches_quantiles" src="https://github.com/user-attachments/assets/fe9850ee-3bac-42d1-8742-8240826b60ef" />
