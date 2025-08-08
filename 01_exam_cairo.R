@@ -205,10 +205,8 @@ merged_data_clean$building_area_density_index <- round(as.numeric((merged_data_c
 
 #---- Building dominanz --------------------------------------------------------
 # Mixing relative area with neighbour density
-
-# A high value means that a big Buildings is in a high density environment
-# mean value means that the a big building is in a loose neighbourhood or a small building in a high density neighbourhood
-# small value: small Building with view neighbours --> less spatial dominanz
+# High value: the building dominates its surroundings in terms of area
+#Low value: Building fits in with the surrounding area in terms of surface area
 
 merged_data_clean$neighbour_building_dominanz <- 
   round(((merged_data_clean$building_area_individual /merged_data_clean$building_area_intersect.x) *merged_data_clean$neighbour_50m_filtered),2)
@@ -216,19 +214,6 @@ merged_data_clean$neighbour_building_dominanz <-
 #....Surrounding index---dont know...-------------------------------------------
 # dont know if this could be intresting
 merged_data_clean$surrounding_index <-  round(as.numeric(((merged_data_clean$building_area_individual/merged_data_clean$building_area_intersect.x)* (1*((buffer_total_area -merged_data_clean$building_area_intersect.x)/buffer_total_area)))),2)
-
-#---- How unusual is the building size in its surroundings? -------------------------
-
-merged_data_clean$special_size_index <- merged_data_clean$building_area_individual / merged_data_clean$avg_neighbour_area
-
-merged_data_clean <- merged_data_clean %>%
-  filter(!is.na(special_size_index))
-
-#z_standardisation
-merged_data_clean$special_size_index_z <- scale(merged_data_clean$special_size_index)
-
-summary(merged_data_clean$special_size_index_z)
-
 
 #---- JOIN ---------------------------------------------------------------------
 
@@ -473,7 +458,7 @@ patches_map <- ggplot() +
   )
 patches_map
 
-#---- MAtrix plot --------------------------------------------------------------
+#---- Matrix plot --------------------------------------------------------------
 
 #create matrix grid
 matrix_plot <- expand.grid(
