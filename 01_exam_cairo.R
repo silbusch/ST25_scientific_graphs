@@ -24,9 +24,9 @@ showtext_auto()
 #**** LOADING DATA *************************************************************
 #*******************************************************************************
 
-setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
-unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_unstructured.gpkg")
-structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
+# setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
+# unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_unstructured.gpkg")
+# structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
 
 setwd("Set the path where the graphics should be saved")
 
@@ -303,7 +303,7 @@ merged_data_edge$fill_group <- factor(merged_data_edge$fill_group, levels = leve
 viridis_colors <- viridis::viridis(length(levels(merged_data_edge$fill_group)) - 1, option = "H")
 fill_colors <- c("Buildings excluded from analysis" = "grey30", setNames(viridis_colors, levels(merged_data_edge$fill_group)[levels(merged_data_edge$fill_group) != "Buildings excluded from analysis"]))
 
-#---- MAP ----------------------------------------------------------------------
+#---- MAP -----------------------------------------------------------------------
 
 map_neighbours_edge <- ggplot() +
   geom_sf(
@@ -315,15 +315,9 @@ map_neighbours_edge <- ggplot() +
     ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]), expand = FALSE
   ) +
   annotate(
-    "text",
-    x = mean(c(bbox["xmin"], bbox["xmax"])),
-    y = bbox["ymin"] - buffer_y * 0.5,
-    label = "Data Source: Henri Debray, German Aerospace Center (DLR)\n Graphic: Silja Buschko",
-    colour = "#F2F2DE",
-    size = 15,
-    family = "Source Sans 3",
-    fontface = "bold",
-    hjust = 0.5
+    "text",x = bbox["xmin"],y = bbox["ymin"] - buffer_y * 0.95, 
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR) | Graphic: Silja Buschko",
+    colour = "#F2F2DE", size = 2, family = "Source Sans 3",fontface = "italic", hjust = 0
   ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
@@ -367,16 +361,16 @@ bar_neighbours_edge <- ggplot(df_counts,
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(colour = "#F2F2DE", size = 10, face = "bold"),
-    axis.text.y = element_text(colour = "#F2F2DE", size = 10, face = "bold"),
-    axis.title.x = element_text(colour = "#F2F2DE", size = 10),
-    axis.title.y = element_text(colour = "#F2F2DE", size = 10, angle = 90),
+    axis.text.x = element_text(colour = "#F2F2DE", size = 8, face = "bold"),
+    axis.text.y = element_text(colour = "#F2F2DE", size = 8, face = "bold"),
+    axis.title.x = element_text(colour = "#F2F2DE", size = 8),
+    axis.title.y = element_text(colour = "#F2F2DE", size = 8, angle = 90),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     panel.grid = element_blank(),
     strip.background = element_blank(),
     panel.grid.major.y = element_line(color = "#F2F2DE", linetype = "dotted", linewidth = 0.3),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", size = 10)
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", size = 8)
   )
   
 
@@ -385,7 +379,7 @@ bar_neighbours_edge
 #---- Combine ------------------------------------------------------------------
 
 combined_neighbour_edge <- map_neighbours_edge +
-  inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+  inset_element(bar_neighbours_edge, left= 0.05, right= 0.95, bottom = 0.02, top = 0.30)
 
 ggsave("cairo_neighbours_buffer50_without_edge.png", combined_neighbour_edge , width = 15, height = 18, units = "cm", dpi = 600)
 
@@ -447,8 +441,13 @@ patches_map <- ggplot() +
   geom_sf(data = merged_data_classified, aes(fill = group_matrix), color = NA) +
   scale_fill_manual(values = bi_colors, name = "Group Composition") +
   coord_sf() +
+  annotate(
+    "text",x = bbox["xmin"],y = bbox["ymin"] + buffer_y * 2, 
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR) | Graphic: Silja Buschko",
+    colour = "grey20", size = 2, family = "Source Sans 3",fontface = "italic", hjust = 0
+  ) +
   labs(title = "Building Connectivity and Area",
-       subtitle = "Group size vs. group area - excluding single buildings.\Example of northeast Nasr City") +
+       subtitle = "Group size vs. group area - excluding single buildings.\nExample of northeast Nasr City") +
   theme(
     plot.margin = margin(5, 5, 5, 5),
     legend.position = "none",
@@ -554,9 +553,13 @@ patches_map_q <- ggplot() +
   geom_sf(data = merged_data_classified_q, aes(fill = group_matrix_q), color = NA) +
   scale_fill_manual(values = bi_colors_q, name = "Group Composition") +
   coord_sf() +
+  annotate(
+    "text",x = bbox["xmin"],y = bbox["ymin"] + buffer_y * 2, 
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR) | Graphic: Silja Buschko",
+    colour = "grey20", size = 2, family = "Source Sans 3",fontface = "italic", hjust = 0)+
   labs(
     title = "Building Connectivity and Area",
-    subtitle = "Group size vs. group area - excluding single buildings.\Example of northeast Nasr City"
+    subtitle = "Group size vs. group area - excluding single buildings.\nExample of northeast Nasr City"
   ) +
   theme(
     plot.margin = margin(5, 5, 5, 5),
@@ -627,6 +630,11 @@ map_dominance <- ggplot() +
     ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
     expand = FALSE
   ) +
+  annotate(
+    "text",x = bbox["xmin"],y = bbox["ymin"] - buffer_y *0.95, 
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR) | Graphic: Silja Buschko",
+    colour = "#F2F2DE", size = 2, family = "Source Sans 3",fontface = "italic", hjust = 0
+  ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
     subtitle = "Dominance of a building within 50 m – measured as\nthe ratio of its area to the built-up area around it.\nExample of Northeast Nasr City - Cairo"
@@ -688,7 +696,7 @@ bar_dominance
 #---- Combine ------------------------------------------------------------------
 
 combined_dominance <- map_dominance +
-  inset_element(bar_dominance, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+  inset_element(bar_dominance, left= 0.05, right= 0.95, bottom = 0.02, top = 0.30)
 
 ggsave("cairo_building_area_dominance.png", combined_dominance , width = 15, height = 18, units = "cm", dpi = 600)
 
@@ -751,9 +759,14 @@ map_neighbours_area <- ggplot() +
     ylim = c(bbox["ymin"] - buffer_y *2, bbox["ymax"]),
     expand = FALSE
   ) +
+  annotate(
+    "text",x = bbox["xmin"],y = bbox["ymin"] - buffer_y *1.98, 
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR) | Graphic: Silja Buschko",
+    colour = "#F2F2DE", size = 2, family = "Source Sans 3",fontface = "italic", hjust = 0
+  ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Average building size within a 50 m radius of a building.\Example of northeast Nasr City"
+    subtitle = "Average building size within a 50 m radius of a building.\nExample of northeast Nasr City"
   ) +
   theme(
     legend.position = "none",
@@ -818,7 +831,7 @@ bar_neighbours_area
 #---- Combine ------------------------------------------------------------------
 
 combined_neighbour_area <- map_neighbours_area +
-  inset_element(bar_neighbours_area, left= 0.05, right= 0.95, bottom = 0, top = 0.50)
+  inset_element(bar_neighbours_area, left= 0.05, right= 0.95, bottom = 0.02, top = 0.50)
 
 ggsave("cairo_avg_building_area.png", combined_neighbour_area , width = 15, height = 18, units = "cm", dpi = 600)
 
