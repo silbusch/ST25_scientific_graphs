@@ -35,7 +35,7 @@ The edge buildings were removed, but still included in the analysis for the rema
 
 # Building dominance
 
-**Note:** The dominance of a building is described by its surface area in comparison to whole neighbouring buildings within a radius of 50 metres.
+**Note:** The dominance of a building is described by its surface area in comparison to whole neighbouring buildings area within a radius of 50 metres.
 *Disclaimer: X-axis scaling problem due to discrete scaling.*
 
 <img width="3543" height="4251" alt="cairo_building_area_dominance" src="https://github.com/user-attachments/assets/e62420f4-fbf2-41af-a678-34231b05d7ad" />
