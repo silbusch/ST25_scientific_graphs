@@ -24,9 +24,9 @@ showtext_auto()
 #**** LOADING DATA *************************************************************
 #*******************************************************************************
 
-# setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
-# unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_unstructured.gpkg")
-# structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
+setwd("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam")
+unstructured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_unstructured.gpkg")
+structured <-st_read("C:/Users/Duck/Documents/Studium/EAGLE/2_semester/4_scientific_graphs/Exam/NewCairo_structured.gpkg")
 
 setwd("Set the path where the graphics should be saved")
 
@@ -322,7 +322,7 @@ map_neighbours_edge <- ggplot() +
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
     plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 14),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 12),
     plot.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.grid.major = element_blank(),
@@ -605,6 +605,85 @@ patches_plot_q <- ggdraw() +
 showtext_opts(dpi = 600)
 
 ggsave("cairo_patches_quantiles.png", patches_plot_q, width = 24, height = 18, units = "cm", dpi = 600)
+################################################################################
+#**** Density_dominance ********************************************************
+################################################################################
+
+#---- MAP ----------------------------------------------------------------------
+
+map_dominance <- ggplot() +
+  geom_sf(
+    data = merged_data_edge, aes(fill = building_area_density_index), color = NA
+  ) +
+  scale_fill_viridis_c(option = "H", name = "Density Index", na.value = "#444444") +
+  coord_sf(
+    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
+    expand = FALSE
+  ) +
+  labs(
+    title = "Urban Contrasts in Cairo’s Building Structure",
+    subtitle = "Dominance of a building within 50 m – measured as\nthe ratio of its area to the built-up area around it"
+  ) +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 11),
+    plot.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.background = element_rect(fill = "#1a1a1a", color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title = element_blank(),
+    
+  )
+
+map_dominance
+
+#---- Barplot ------------------------------------------------------------------
+
+# Excluding Buildings where inside_border == 0
+filtered_data <- merged_data_edge %>% 
+  filter(include_in_analysis == 1)
+
+bar_dominance <- ggplot(merged_data_edge, aes(x = factor(building_area_density_index),  fill = factor(building_area_density_index))) +
+  geom_bar() +
+  scale_fill_viridis_d(option = "H") +
+  scale_x_discrete(breaks = seq(0,1, 0.1)) +
+  labs(
+    x = "Building dominance index",
+    y = "Count",
+  ) +
+  facet_wrap(
+    ~ type,
+    labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")),
+    scales = "free_y")+
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Source Sans 3"),
+    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 10, face = "bold", colour = "#F2F2DE"),
+    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10, face = "bold"),
+    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10),
+    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 10),
+    panel.background = element_rect(fill = NA, color = NA),
+    plot.background = element_rect(fill = NA, color = NA),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
+    panel.grid.major.y = element_line(color = "#F2F2DE", linetype = "dotted", linewidth = 0.3)
+  )
+
+
+bar_dominance
+
+#---- Combine ------------------------------------------------------------------
+
+combined_dominance <- map_dominance +
+  inset_element(bar_dominance, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
+
+ggsave("cairo_building_area_dominance.png", combined_dominance , width = 15, height = 18, units = "cm", dpi = 600)
 
 ################################################################################
 #**** AVG NEIGHBOUR AREA *******************************************************
@@ -736,83 +815,3 @@ combined_neighbour_area <- map_neighbours_area +
 
 ggsave("cairo_avg_building_area.png", combined_neighbour_area , width = 15, height = 18, units = "cm", dpi = 600)
 
-
-################################################################################
-#**** Density_dominance ********************************************************
-################################################################################
-
-#---- MAP ----------------------------------------------------------------------
-
-map_dominance <- ggplot() +
-  geom_sf(
-    data = merged_data_edge, aes(fill = building_area_density_index), color = NA
-  ) +
-  scale_fill_viridis_c(option = "H", name = "Density Index", na.value = "#444444") +
-  coord_sf(
-    ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]),
-    expand = FALSE
-  ) +
-  labs(
-    title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Dominance of a building within 50 m – measured as\nthe ratio of its area to the built-up area around it"
-  ) +
-  theme(
-    legend.position = "none",
-    text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 11),
-    plot.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.background = element_rect(fill = "#1a1a1a", color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    axis.title = element_blank(),
-    
-  )
-
-map_dominance
-
-#---- Barplot ------------------------------------------------------------------
-
-# Excluding Buildings where inside_border == 0
-filtered_data <- merged_data_edge %>% 
-  filter(include_in_analysis == 1)
-
-bar_dominance <- ggplot(merged_data_edge, aes(x = factor(building_area_density_index),  fill = factor(building_area_density_index))) +
-  geom_bar() +
-  scale_fill_viridis_d(option = "H") +
-  scale_x_discrete(breaks = seq(0,1, 0.1)) +
-  labs(
-    x = "Building dominance index",
-    y = "Count",
-  ) +
-  facet_wrap(
-    ~ type,
-    labeller = as_labeller(c("1" = "Unstructured urban space", "2" = "Structured urban space")),
-    scales = "free_y")+
-  theme(
-    legend.position = "none",
-    text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(margin = margin(t = 0, unit = "pt"), angle = 0, vjust = 1, hjust = 0.5, size = 10, face = "bold", colour = "#F2F2DE"),
-    axis.text.y = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10, face = "bold"),
-    axis.title.x = element_text(color = "#F2F2DE", family = "Source Sans 3", size = 10),
-    axis.title.y = element_text(color = "#F2F2DE", angle = 90, family = "Source Sans 3", size = 10),
-    panel.background = element_rect(fill = NA, color = NA),
-    plot.background = element_rect(fill = NA, color = NA),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", family = "Source Sans 3", size = 10),
-    panel.grid.major.y = element_line(color = "#F2F2DE", linetype = "dotted", linewidth = 0.3)
-  )
-
-
-bar_dominance
-
-#---- Combine ------------------------------------------------------------------
-
-combined_dominance <- map_dominance +
-  inset_element(bar_dominance, left= 0.05, right= 0.95, bottom = 0, top = 0.30)
-
-ggsave("cairo_building_area_dominance.png", combined_dominance , width = 15, height = 18, units = "cm", dpi = 600)
