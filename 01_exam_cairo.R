@@ -314,15 +314,26 @@ map_neighbours_edge <- ggplot() +
   coord_sf(
     ylim = c(bbox["ymin"] - buffer_y, bbox["ymax"]), expand = FALSE
   ) +
+  annotate(
+    "text",
+    x = mean(c(bbox["xmin"], bbox["xmax"])),
+    y = bbox["ymin"] - buffer_y * 0.5,
+    label = "Data Source: Henri Debray, German Aerospace Center (DLR)\n Graphic: Silja Buschko",
+    colour = "#F2F2DE",
+    size = 15,
+    family = "Source Sans 3",
+    fontface = "bold",
+    hjust = 0.5
+  ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Number of neighbouring buildings within a radius of 50 m"
+    subtitle = "Number of neighbouring buildings within a radius of 50 m.\nExample of northeast Nasr City"
   ) +
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    plot.title = element_text(color = "#F2F2DE", size = 80, face = "bold"),
-    plot.subtitle = element_text(color = "#F2F2DE", size = 60),
+    plot.title = element_text(color = "#F2F2DE", size = 18, face = "bold"),
+    plot.subtitle = element_text(color = "#F2F2DE", size = 14),
     plot.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.background = element_rect(fill = "#1a1a1a", color = NA),
     panel.grid.major = element_blank(),
@@ -356,15 +367,16 @@ bar_neighbours_edge <- ggplot(df_counts,
   theme(
     legend.position = "none",
     text = element_text(family = "Source Sans 3"),
-    axis.text.x = element_text(colour = "#F2F2DE", size = 50, face = "bold"),
-    axis.text.y = element_text(colour = "#F2F2DE", size = 50, face = "bold"),
-    axis.title.x = element_text(colour = "#F2F2DE", size = 50),
-    axis.title.y = element_text(colour = "#F2F2DE", size = 50, angle = 90),
+    axis.text.x = element_text(colour = "#F2F2DE", size = 10, face = "bold"),
+    axis.text.y = element_text(colour = "#F2F2DE", size = 10, face = "bold"),
+    axis.title.x = element_text(colour = "#F2F2DE", size = 10),
+    axis.title.y = element_text(colour = "#F2F2DE", size = 10, angle = 90),
     panel.background = element_rect(fill = NA, color = NA),
     plot.background = element_rect(fill = NA, color = NA),
     panel.grid = element_blank(),
     strip.background = element_blank(),
-    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", size = 50)
+    panel.grid.major.y = element_line(color = "#F2F2DE", linetype = "dotted", linewidth = 0.3),
+    strip.text = element_text(hjust = 0, face = "bold", color = "#F2F2DE", size = 10)
   )
   
 
@@ -436,7 +448,7 @@ patches_map <- ggplot() +
   scale_fill_manual(values = bi_colors, name = "Group Composition") +
   coord_sf() +
   labs(title = "Building Connectivity and Area",
-       subtitle = "Group size vs. group area (excluding single buildings)") +
+       subtitle = "Group size vs. group area - excluding single buildings.\Example of northeast Nasr City") +
   theme(
     plot.margin = margin(5, 5, 5, 5),
     legend.position = "none",
@@ -544,7 +556,7 @@ patches_map_q <- ggplot() +
   coord_sf() +
   labs(
     title = "Building Connectivity and Area",
-    subtitle = "Group size vs. group area (excluding single buildings)"
+    subtitle = "Group size vs. group area - excluding single buildings.\Example of northeast Nasr City"
   ) +
   theme(
     plot.margin = margin(5, 5, 5, 5),
@@ -617,7 +629,7 @@ map_dominance <- ggplot() +
   ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Dominance of a building within 50 m – measured as\nthe ratio of its area to the built-up area around it"
+    subtitle = "Dominance of a building within 50 m – measured as\nthe ratio of its area to the built-up area around it.\nExample of Northeast Nasr City - Cairo"
   ) +
   theme(
     legend.position = "none",
@@ -741,7 +753,7 @@ map_neighbours_area <- ggplot() +
   ) +
   labs(
     title = "Urban Contrasts in Cairo’s Building Structure",
-    subtitle = "Average building size within a 50 m radius of a building"
+    subtitle = "Average building size within a 50 m radius of a building.\Example of northeast Nasr City"
   ) +
   theme(
     legend.position = "none",
